@@ -7,6 +7,10 @@ from torchvision.io import decode_image, read_image
 from pathlib import Path
 from torchvision.transforms.v2 import functional as F
 
+def save_image(img_path: Path, img: torch.Tensor, output_folder: str | Path):
+    output_folder = Path(output_folder)
+    output_folder.mkdir(parents=True, exist_ok=True)
+    v2.ToPILImage()(img).save(output_folder / img_path.name)
 
 def read_data(path: str):
     return read_image(str(path))

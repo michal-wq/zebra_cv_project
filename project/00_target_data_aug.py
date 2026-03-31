@@ -2,23 +2,11 @@ import torch
 from torchvision.transforms import v2
 from torchvision.io import decode_image, read_image
 import matplotlib.pyplot as plt
-from helpers import plot        # helper funktion von PyTorch Doku
+from helpers import plot, read_data, iter_images, save_image
 from pathlib import Path
-
-def read_data(path: str):
-    return read_image(str(path))
 
 def transform_image(img, transformation):
     return transformation(img)
-
-def iter_images(folder: str | Path):
-    for img_path in sorted(Path(folder).glob('*.png')):
-        yield img_path, read_data(img_path)
-
-def save_image(img_path: Path, img: torch.Tensor, output_folder: str | Path):
-    output_folder = Path(output_folder)
-    output_folder.mkdir(parents=True, exist_ok=True)
-    v2.ToPILImage()(img).save(output_folder / img_path.name)
 
 def main():
 
