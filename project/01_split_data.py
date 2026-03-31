@@ -111,7 +111,7 @@ def main():
 
     # Zähle die Daten
     print('='*n)
-    path = '../swissimage_annotator/static/data'
+    path = '../raw_data/data'
     counts = count_data_in_folder(path)
     print(counts)
     print('='*n)
@@ -132,7 +132,7 @@ def main():
     cities = ['luzern', 'st gallen']
     for city in cities:
         split_dataset_by_class(
-        source_root=f"../swissimage_annotator/static/data/{city}",  # has: crops/, y/, n/
+        source_root=f"../raw_data/data/{city}",  # has: crops/, y/, n/
         output_root="data",
         class_names=("y", "n")             # crops is ignored
         )

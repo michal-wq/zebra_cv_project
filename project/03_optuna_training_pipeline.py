@@ -12,14 +12,94 @@ from optuna.samplers import TPESampler
 from helpers import read_data, save_image
 import seaborn as sns
 from models import MLP
-from training_functions import compute_l1_penalty, compute_l2_penalty, train_one_epoch, evaluate, check_device
 from prep_training import infer_input_config, make_dataloaders
 import time
 import psutil
 import os
 
+
+def check_device():
+    if torch.cuda.is_available():
+        DEVICE = torch.device("cuda")
+    elif torch.backends.mps.is_available():
+        DEVICE = torch.device("mps")
+    else:
+        DEVICE = torch.device("cpu")
+    print(f"Verwende Gerät: {DEVICE}")
+    return DEVICE
+
 torch.manual_seed(77)
 DEVICE = check_device()
+
+def compute_l1_penalty(model: nn.Module ,lambda_: float = 1e-4) -> torch.Tensor:
+    penalty = torch.tensor(0.0, device = DEVICE)
+    for p in model.parameters():
+        penalty += p.abs().sum()       # |w| summieren
+    return lambda_ * penalty
+
+
+def compute_l2_penalty(model: nn.Module, lambda_: float = 1e-4) -> torch.Tensor:
+    penalty = torch.tensor(0.0, device = DEVICE)
+    for p in model.parameters():
+        penalty += p.pow(2).sum()      # w² summieren
+    return lambda_ * penalty
+
+REGULARIZER_FN = {
+    None:    lambda m: 0.0,                                    # keine Regularisierung
+    "l1":    compute_l1_penalty,                               # nur L1
+    "l2":    compute_l2_penalty,                               # nur L2
+    "l1_l2": lambda m: compute_l1_penalty(m) + compute_l2_penalty(m),  # beide
+}
+
+
+def train_one_epoch(
+    model:      nn.Module,
+    loader:     DataLoader,
+    criterion:  nn.Module,
+    optimizer:  optim.Optimizer,
+    regularizer: str | None,
+    DEVICE: str
+) -> tuple[float, float]:
+    model.train()
+    total_loss, correct, n = 0.0, 0, 0
+    reg_fn = REGULARIZER_FN[regularizer]
+
+    for xb, yb in loader:
+        xb, yb = xb.to(DEVICE), yb.to(DEVICE)
+        optimizer.zero_grad()
+        logits = model(xb)
+        loss   = criterion(logits, yb) + reg_fn(model)
+        loss.backward()
+        optimizer.step()
+
+        total_loss += loss.item() * len(xb)
+        correct    += (logits.argmax(1) == yb).sum().item()
+        n          += len(xb)
+
+    return total_loss / n, correct / n
+
+@torch.no_grad()
+def evaluate(
+    model:     nn.Module,
+    loader:    DataLoader,
+    criterion: nn.Module,
+    device: str
+) -> tuple[float, float]:
+    model.eval()
+    total_loss, correct, n = 0.0, 0, 0
+
+    for xb, yb in loader:
+        xb, yb = xb.to(device), yb.to(device)
+        logits = model(xb)
+        loss   = criterion(logits, yb)
+
+        total_loss += loss.item() * len(xb)
+        correct    += (logits.argmax(1) == yb).sum().item()
+        n          += len(xb)
+
+    return total_loss / n, correct / n
+
+
 # LOAD DATA
 TRAIN_PATH = 'data/train'
 VAL_PATH = 'data/val'
@@ -82,7 +162,7 @@ def objective(trial: optuna.Trial) -> float:
 
     for epoch in range(EPOCHS):
         train_one_epoch(model, train_loader, criterion, optimizer, regularizer, DEVICE)
-        _, val_acc = evaluate(model, val_loader, criterion)
+        _, val_acc = evaluate(model, val_loader, criterion, DEVICE)
 
         # Early Stopping
         if val_acc > best_val_acc:
@@ -184,12 +264,12 @@ history = {'loss': [], 'accuracy': [], 'val_loss': [], 'val_accuracy': []}
 best_val_acc  = 0.0
 patience_ct   = 0
 FINAL_PATIENCE = 10
-
+best_model_save_path = 'trained_models/best_model_optuna.pt'
 for epoch in range(1, 101):
     tr_loss, tr_acc = train_one_epoch(
         best_model, train_loader, criterion, best_optimizer, p['regularizer']
     )
-    val_loss, val_acc = evaluate(best_model, val_loader, criterion)
+    val_loss, val_acc = evaluate(best_model, val_loader, criterion, DEVICE)
 
     history['loss'].append(tr_loss)
     history['accuracy'].append(tr_acc)
@@ -205,7 +285,7 @@ for epoch in range(1, 101):
     if val_acc > best_val_acc:
         best_val_acc = val_acc
         patience_ct  = 0
-        torch.save(best_model.state_dict(), 'best_model_optuna.pt')
+        torch.save(best_model.state_dict(), best_model_save_path)
     else:
         patience_ct += 1
         if patience_ct >= FINAL_PATIENCE:
@@ -213,8 +293,8 @@ for epoch in range(1, 101):
             break
 
 # Besten Checkpoint laden & auf Testset evaluieren
-best_model.load_state_dict(torch.load('best_model_optuna.pt'))
-test_loss, test_acc = evaluate(best_model, test_loader, criterion)
+best_model.load_state_dict(torch.load(best_model_save_path))
+test_loss, test_acc = evaluate(best_model, test_loader, criterion, DEVICE)
 print(f'\n  Test-Loss:     {test_loss:.4f}')
 print(f'  Test-Accuracy: {test_acc:.4f}')
 print('  → Modell gespeichert: best_model_optuna.pt')
