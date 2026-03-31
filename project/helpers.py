@@ -3,8 +3,17 @@ import torch
 from torchvision.utils import draw_bounding_boxes, draw_keypoints, draw_segmentation_masks
 from torchvision import tv_tensors
 from torchvision.transforms import v2
+from torchvision.io import decode_image, read_image
+from pathlib import Path
 from torchvision.transforms.v2 import functional as F
 
+
+def read_data(path: str):
+    return read_image(str(path))
+
+def iter_images(folder: str | Path):
+    for img_path in sorted(Path(folder).glob('*.png')):
+        yield img_path, read_data(img_path)
 
 def plot(imgs, row_title=None, bbox_width=3, **imshow_kwargs):
     if not isinstance(imgs[0], list):
