@@ -5,6 +5,12 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, random_split
+from pathlib import Path
+from typing import Dict, Tuple
+
+import torch
+from torch.utils.data import DataLoader
+from torchvision import datasets, transforms
 
 import optuna
 from optuna.pruners import MedianPruner
@@ -29,12 +35,7 @@ TRAIN_PATH = 'data/train'
 VAL_PATH = 'data/val'
 TEST_PATH = 'data/test'
 
-from pathlib import Path
-from typing import Dict, Tuple
 
-import torch
-from torch.utils.data import DataLoader
-from torchvision import datasets, transforms
 
 def infer_input_config(loader):
     x, y = next(iter(loader))              # x: [B, C, H, W], y: [B]
@@ -112,7 +113,6 @@ def make_dataloaders(
     idx_to_class = {idx: name for name, idx in class_to_idx.items()}
 
     return dataloaders, class_to_idx, idx_to_class
-
 
 def main():
     torch.manual_seed(77)

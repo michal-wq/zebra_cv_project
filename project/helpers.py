@@ -20,6 +20,7 @@ def iter_images(folder: str | Path):
         yield img_path, read_data(img_path)
 
 def plot(imgs, row_title=None, bbox_width=3, **imshow_kwargs):
+
     if not isinstance(imgs[0], list):
         # Make a 2d grid even if there's just 1 row
         imgs = [imgs]
