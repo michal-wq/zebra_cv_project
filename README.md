@@ -16,7 +16,7 @@ Dieses Repository enthält den kompletten Trainings-Workflow:
 
 ## Repository-Struktur
 
-- `project/00_target_data_aug.py` – Augmentierung einzelner Bilder
+- `project/00_target_data_aug.py` – Augmentierung einzelner Bilder (Optional)
 - `project/01_split_data.py` – Split der Klassendaten in Train/Val/Test
 - `project/02_model_training_pipeline.py` – einfache Baseline-Pipeline
 - `project/03_optuna_training_pipeline.py` – Optuna + finales Training
