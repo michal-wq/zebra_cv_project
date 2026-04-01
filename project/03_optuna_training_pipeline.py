@@ -1,64 +1,106 @@
-import numpy as np
+"""Optimiert ein NN mit Optuna, trainiert das beste Modell final und speichert Metriken sowie Plots als Artefakte."""
+
+import os
+import time
+from pathlib import Path
+
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+import numpy as np
+import optuna
+import psutil
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader, random_split
-from pathlib import Path
-from typing import Dict, Tuple
-import optuna
 from optuna.pruners import MedianPruner
 from optuna.samplers import TPESampler
-from helpers import read_data, save_image
-import seaborn as sns
+from sklearn.metrics import f1_score, precision_score, recall_score
+from torch.utils.data import DataLoader
+
 from models import MLP
 from prep_training import infer_input_config, make_dataloaders
-import time
-import psutil
-import os
+from training_functions import save_best_model_artifacts
+
+
+# =========================
+# KONFIGURATION
+# =========================
+SEED = 77
+
+ARTIFACT_BASE_DIR = 'trained_models'
+MODEL_NAME = 'MLP_optuna_best'
+BEST_MODEL_CHECKPOINT_PATH = 'trained_models/MLP_base_model_optuna.pt'
+
+N_TRIALS = 50
+OPTUNA_EPOCHS = 15
+OPTUNA_PATIENCE = 5
+OPTUNA_PRUNER_STARTUP_TRIALS = 5
+OPTUNA_PRUNER_WARMUP_STEPS = 5
+STUDY_NAME = 'zebra_giga_shit_model_optimization'
+
+FINAL_TRAIN_EPOCHS = 100
+FINAL_PATIENCE = 10
+
+PLOT_DPI = 180
+
+
+def save_figure_png(fig: plt.Figure, output_path: Path, dpi: int = PLOT_DPI) -> Path:
+    """Speichert eine Matplotlib-Figur als PNG und schließt sie danach."""
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, dpi=dpi, bbox_inches='tight')
+    plt.close(fig)
+    return output_path
 
 
 def check_device():
+    """Wählt das beste verfügbare Rechengerät (CUDA, MPS oder CPU)."""
     if torch.cuda.is_available():
-        DEVICE = torch.device("cuda")
+        device = torch.device('cuda')
     elif torch.backends.mps.is_available():
-        DEVICE = torch.device("mps")
+        device = torch.device('mps')
     else:
-        DEVICE = torch.device("cpu")
-    print(f"Verwende Gerät: {DEVICE}")
-    return DEVICE
+        device = torch.device('cpu')
+    print(f'Verwende Gerät: {device}')
+    return device
 
-torch.manual_seed(77)
+
+torch.manual_seed(SEED)
 DEVICE = check_device()
 
-def compute_l1_penalty(model: nn.Module ,lambda_: float = 1e-4) -> torch.Tensor:
-    penalty = torch.tensor(0.0, device = DEVICE)
+
+def compute_l1_penalty(model: nn.Module, lambda_: float = 1e-4) -> torch.Tensor:
+    """Berechnet die L1-Regularisierungsstrafe über alle Modellparameter."""
+    penalty = torch.tensor(0.0, device=DEVICE)
     for p in model.parameters():
-        penalty += p.abs().sum()       # |w| summieren
+        penalty += p.abs().sum()
     return lambda_ * penalty
 
 
 def compute_l2_penalty(model: nn.Module, lambda_: float = 1e-4) -> torch.Tensor:
-    penalty = torch.tensor(0.0, device = DEVICE)
+    """Berechnet die L2-Regularisierungsstrafe über alle Modellparameter."""
+    penalty = torch.tensor(0.0, device=DEVICE)
     for p in model.parameters():
-        penalty += p.pow(2).sum()      # w² summieren
+        penalty += p.pow(2).sum()
     return lambda_ * penalty
 
+
 REGULARIZER_FN = {
-    None:    lambda m: 0.0,                                    # keine Regularisierung
-    "l1":    compute_l1_penalty,                               # nur L1
-    "l2":    compute_l2_penalty,                               # nur L2
-    "l1_l2": lambda m: compute_l1_penalty(m) + compute_l2_penalty(m),  # beide
+    None: lambda m: 0.0,
+    'l1': compute_l1_penalty,
+    'l2': compute_l2_penalty,
+    'l1_l2': lambda m: compute_l1_penalty(m) + compute_l2_penalty(m),
 }
 
 
 def train_one_epoch(
-    model:      nn.Module,
-    loader:     DataLoader,
-    criterion:  nn.Module,
-    optimizer:  optim.Optimizer,
-    regularizer: str | None
+    model: nn.Module,
+    loader: DataLoader,
+    criterion: nn.Module,
+    optimizer: optim.Optimizer,
+    regularizer: str | None,
 ) -> tuple[float, float]:
+    """Trainiert das Modell für eine Epoche und gibt mittleren Loss sowie Accuracy zurück."""
     model.train()
     total_loss, correct, n = 0.0, 0, 0
     reg_fn = REGULARIZER_FN[regularizer]
@@ -67,147 +109,160 @@ def train_one_epoch(
         xb, yb = xb.to(DEVICE), yb.to(DEVICE)
         optimizer.zero_grad()
         logits = model(xb)
-        loss   = criterion(logits, yb) + reg_fn(model)
+        loss = criterion(logits, yb) + reg_fn(model)
         loss.backward()
         optimizer.step()
 
         total_loss += loss.item() * len(xb)
-        correct    += (logits.argmax(1) == yb).sum().item()
-        n          += len(xb)
+        correct += (logits.argmax(1) == yb).sum().item()
+        n += len(xb)
 
     return total_loss / n, correct / n
 
+
 @torch.no_grad()
-def evaluate(
-    model:     nn.Module,
-    loader:    DataLoader,
-    criterion: nn.Module,
-) -> tuple[float, float]:
+def collect_predictions(model: nn.Module, loader: DataLoader) -> tuple[np.ndarray, np.ndarray]:
+    """Sammelt True-Labels und Modellvorhersagen für einen kompletten Loader."""
     model.eval()
-    total_loss, correct, n = 0.0, 0, 0
+    all_preds, all_targets = [], []
 
     for xb, yb in loader:
         xb, yb = xb.to(DEVICE), yb.to(DEVICE)
         logits = model(xb)
-        loss   = criterion(logits, yb)
+        preds = logits.argmax(1)
+        all_preds.extend(preds.cpu().numpy())
+        all_targets.extend(yb.cpu().numpy())
+
+    return np.array(all_targets), np.array(all_preds)
+
+
+@torch.no_grad()
+def evaluate(
+    model: nn.Module,
+    loader: DataLoader,
+    criterion: nn.Module,
+) -> dict:
+    """Evaluiert Loss, Accuracy, Precision, Recall und F1 für einen Loader."""
+    model.eval()
+    total_loss, correct, n = 0.0, 0, 0
+
+    all_preds = []
+    all_targets = []
+
+    for xb, yb in loader:
+        xb, yb = xb.to(DEVICE), yb.to(DEVICE)
+        logits = model(xb)
+        loss = criterion(logits, yb)
+
+        preds = logits.argmax(1)
 
         total_loss += loss.item() * len(xb)
-        correct    += (logits.argmax(1) == yb).sum().item()
-        n          += len(xb)
+        correct += (preds == yb).sum().item()
+        n += len(xb)
 
-    return total_loss / n, correct / n
+        all_preds.extend(preds.cpu().numpy())
+        all_targets.extend(yb.cpu().numpy())
+
+    acc = correct / n
+    precision = precision_score(all_targets, all_preds, average='weighted', zero_division=0)
+    recall = recall_score(all_targets, all_preds, average='weighted', zero_division=0)
+    f1 = f1_score(all_targets, all_preds, average='weighted', zero_division=0)
+
+    return {
+        'loss': total_loss / n,
+        'accuracy': acc,
+        'precision': precision,
+        'recall': recall,
+        'f1': f1,
+    }
 
 
-# LOAD DATA
-TRAIN_PATH = 'data/train'
-VAL_PATH = 'data/val'
-TEST_PATH = 'data/test'
-
+# Daten laden.
 dataloaders, class_to_idx, idx_to_class = make_dataloaders(num_workers=0)
 
 train_loader = dataloaders['train']
 val_loader = dataloaders['val']
 test_loader = dataloaders['test']
-train_features, train_labels = next(iter(train_loader))
 
 cfg = infer_input_config(train_loader)
-num_classes = len(class_to_idx)
 input_size = cfg['input_size_mlp']
 
-print('good')
-
-N_TRIALS = 3
-EPOCHS   = 30   
 
 def objective(trial: optuna.Trial) -> float:
-    ## Teil 1: Hyperparameter definieren
-    # --- Hyperparameter-Suchraum ---
-    #batch_size     = trial.suggest_categorical('batch_size', [16, 32, 64, 112, 128])
-    n_layers       = trial.suggest_int('n_layers', 1, 5)
-    activation     = trial.suggest_categorical('activation', ['relu', 'tanh', 'sigmoid'])
+    """Definiert einen Optuna-Trial und gibt den besten Validierungs-Loss zurück."""
+    n_layers = trial.suggest_int('n_layers', 1, 5)
+    activation = trial.suggest_categorical('activation', ['relu', 'tanh', 'sigmoid'])
     optimizer_name = trial.suggest_categorical('optimizer', ['adam', 'sgd', 'rmsprop', 'adagrad'])
-    learning_rate  = trial.suggest_float('learning_rate', 1e-4, 1e-1, log=True)
-    dropout_rate   = trial.suggest_float('dropout_rate', 0.0, 0.5, step=0.1)
-    regularizer    = trial.suggest_categorical('regularizer', [None, 'l1', 'l2', 'l1_l2'])
+    learning_rate = trial.suggest_float('learning_rate', 1e-4, 1e-1, log=True)
+    dropout_rate = trial.suggest_float('dropout_rate', 0.0, 0.5, step=0.1)
+    regularizer = trial.suggest_categorical('regularizer', [None, 'l1', 'l2', 'l1_l2'])
 
     layer_sizes = [
         trial.suggest_int(f'n_nodes_layer_{i}', 16, 256, step=16)
         for i in range(n_layers)
     ]
 
-    ## Teil 2: Modell und Optmierern aufbauen
-    # --- DataLoader ---
-    train_loader = dataloaders['train']
-    val_loader   = dataloaders['val']
+    model = MLP(input_size, n_layers, layer_sizes, activation, dropout_rate).to(DEVICE)
 
-    # --- Modell ---
-    model = MLP(input_size,n_layers, layer_sizes, activation, dropout_rate).to(DEVICE)
-
-    # --- Optimizer ---
     optimizer_map = {
-        'adam':    optim.Adam,
-        'sgd':     optim.SGD,
+        'adam': optim.Adam,
+        'sgd': optim.SGD,
         'rmsprop': optim.RMSprop,
         'adagrad': optim.Adagrad,
     }
     optimizer = optimizer_map[optimizer_name](model.parameters(), lr=learning_rate)
     criterion = nn.CrossEntropyLoss()
 
-    ## Teil 3: Early Stopping & Pruning
-    best_val_acc  = 0.0
-    patience_ct   = 0
-    patience      = 5   # Early Stopping
+    best_val_loss = 1e10
+    patience_ct = 0
 
-    for epoch in range(EPOCHS):
+    for epoch in range(OPTUNA_EPOCHS):
         train_one_epoch(model, train_loader, criterion, optimizer, regularizer)
-        _, val_acc = evaluate(model, val_loader, criterion)
+        metrics = evaluate(model, val_loader, criterion)
+        val_acc = metrics['accuracy']
+        val_loss = metrics['loss']
 
-        # Early Stopping
-        if val_acc > best_val_acc:
-            best_val_acc = val_acc
-            patience_ct  = 0
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            patience_ct = 0
         else:
             patience_ct += 1
-            if patience_ct >= patience:
+            if patience_ct >= OPTUNA_PATIENCE:
                 break
 
-        # Pruning: schlechte Trials frühzeitig abbrechen
         trial.report(val_acc, epoch)
         if trial.should_prune():
             raise optuna.exceptions.TrialPruned()
 
-    return best_val_acc
+    return best_val_loss
 
 
-
-sampler = TPESampler(seed=77)
-pruner  = MedianPruner(n_startup_trials=5, n_warmup_steps=5)
+sampler = TPESampler(seed=SEED)
+pruner = MedianPruner(
+    n_startup_trials=OPTUNA_PRUNER_STARTUP_TRIALS,
+    n_warmup_steps=OPTUNA_PRUNER_WARMUP_STEPS,
+)
 
 study = optuna.create_study(
-    direction='maximize',
+    direction='minimize',
     sampler=sampler,
     pruner=pruner,
-    study_name='zebra_giga_shit_model_optimization',
+    study_name=STUDY_NAME,
 )
 
 start_time = time.time()
 process = psutil.Process(os.getpid())
-ram_start = process.memory_info().rss / 1024**3   # GB
-
-print(f'\nStarte Optuna-Optimierung: {N_TRIALS} Trials, Pruning aktiv')
-print(f'RAM vor Training:  {ram_start:.2f} GB\n')
+ram_start = process.memory_info().rss / 1024**3
 
 print(f'\nStarte Optuna-Optimierung: {N_TRIALS} Trials, Pruning aktiv\n')
 study.optimize(objective, n_trials=N_TRIALS, show_progress_bar=True)
 
-# Endwerte erfassen
 end_time = time.time()
-ram_end = process.memory_info().rss / 1024**3  
+ram_end = process.memory_info().rss / 1024**3
 
-# Ausgabe
-print('\n' + '='*60)
+print('\n' + '=' * 60)
 print('RESSOURCEN & ZEIT')
-print('='*60)
+print('=' * 60)
 print(f'  Gesamtdauer     : {(end_time - start_time) / 60:.2f} Minuten')
 print(f'  Ø pro Trial     : {(end_time - start_time) / N_TRIALS:.1f} Sekunden')
 print(f'  RAM Start       : {ram_start:.2f} GB')
@@ -219,28 +274,20 @@ print(f'  Trials pruned   : {len([t for t in study.trials if t.state == optuna.t
 print(f'  Trials komplett : {len([t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE])}')
 
 best = study.best_trial
-print('\n' + '='*60)
+print('\n' + '=' * 60)
 print('BESTER TRIAL')
-print('='*60)
+print('=' * 60)
 print(f'  Trial Nummer : {best.number}')
-print(f'  Val Accuracy : {best.value:.4f}')
+print(f'  Val Loss     : {best.value:.4f}')
 print('\n  Hyperparameter:')
 for key, value in best.params.items():
     print(f'    {key:30s} = {value}')
 
-'''
-
-Bestes Modell nochmal trainieren
-
-'''
-
-
-print('\n' + '='*60)
-print('Trainiere bestes Modell mit 100 Epochen...')
-print('='*60)
+print('\n' + '=' * 60)
+print(f'Trainiere bestes Modell mit {FINAL_TRAIN_EPOCHS} Epochen...')
+print('=' * 60)
 
 p = best.params
-
 layer_sizes = [p[f'n_nodes_layer_{i}'] for i in range(p['n_layers'])]
 
 best_model = MLP(
@@ -252,69 +299,111 @@ best_model = MLP(
 ).to(DEVICE)
 
 optimizer_map = {
-    'adam':    optim.Adam,
-    'sgd':     optim.SGD,
+    'adam': optim.Adam,
+    'sgd': optim.SGD,
     'rmsprop': optim.RMSprop,
     'adagrad': optim.Adagrad,
 }
 best_optimizer = optimizer_map[p['optimizer']](best_model.parameters(), lr=p['learning_rate'])
-criterion      = nn.CrossEntropyLoss()
+criterion = nn.CrossEntropyLoss()
 
-history = {'loss': [], 'accuracy': [], 'val_loss': [], 'val_accuracy': []}
-best_val_acc  = 0.0
-patience_ct   = 0
-FINAL_PATIENCE = 10
-best_model_save_path = 'trained_models/best_model_optuna.pt'
-for epoch in range(1, 101):
+history = {
+    'loss': [],
+    'accuracy': [],
+    'val_loss': [],
+    'val_accuracy': [],
+    'val_recall': [],
+    'val_precision': [],
+    'val_f1': [],
+}
+best_val_acc = 0.0
+patience_ct = 0
+
+for epoch in range(FINAL_TRAIN_EPOCHS):
     tr_loss, tr_acc = train_one_epoch(
-        best_model, train_loader, criterion, best_optimizer, p['regularizer']
+        best_model,
+        train_loader,
+        criterion,
+        best_optimizer,
+        p['regularizer'],
     )
-    val_loss, val_acc = evaluate(best_model, val_loader, criterion)
+    metrics = evaluate(best_model, val_loader, criterion)
+
+    val_loss = metrics['loss']
+    val_acc = metrics['accuracy']
+    val_recall = metrics['recall']
+    val_f1 = metrics['f1']
+    val_prec = metrics['precision']
 
     history['loss'].append(tr_loss)
     history['accuracy'].append(tr_acc)
     history['val_loss'].append(val_loss)
     history['val_accuracy'].append(val_acc)
+    history['val_recall'].append(val_recall)
+    history['val_precision'].append(val_prec)
+    history['val_f1'].append(val_f1)
 
     print(
-        f'Epoch {epoch:3d}/100  '
+        f'Epoch {epoch:3d}/{FINAL_TRAIN_EPOCHS}  '
         f'loss: {tr_loss:.4f}  acc: {tr_acc:.4f}  '
         f'val_loss: {val_loss:.4f}  val_acc: {val_acc:.4f}'
     )
 
     if val_acc > best_val_acc:
         best_val_acc = val_acc
-        patience_ct  = 0
-        torch.save(best_model.state_dict(), best_model_save_path)
+        patience_ct = 0
+        torch.save(best_model.state_dict(), BEST_MODEL_CHECKPOINT_PATH)
     else:
         patience_ct += 1
         if patience_ct >= FINAL_PATIENCE:
             print(f'  → Early Stopping nach Epoch {epoch}.')
             break
 
-# Besten Checkpoint laden & auf Testset evaluieren
-best_model.load_state_dict(torch.load(best_model_save_path))
-test_loss, test_acc = evaluate(best_model, test_loader, criterion)
-print(f'\n  Test-Loss:     {test_loss:.4f}')
-print(f'  Test-Accuracy: {test_acc:.4f}')
-print('  → Modell gespeichert: best_model_optuna.pt')
+best_model.load_state_dict(torch.load(BEST_MODEL_CHECKPOINT_PATH))
+metrics = evaluate(best_model, test_loader, criterion)
 
-"""
+test_loss = metrics['loss']
+test_acc = metrics['accuracy']
+test_recall = metrics['recall']
+test_f1 = metrics['f1']
+test_prec = metrics['precision']
 
-Visualisierungen
+y_true, y_pred = collect_predictions(best_model, test_loader)
 
-"""
+artifact_dir = save_best_model_artifacts(
+    model=best_model,
+    y_true=y_true,
+    y_pred=y_pred,
+    model_name=MODEL_NAME,
+    score=test_acc,
+    params=best.params,
+    history=history,
+    base_dir=ARTIFACT_BASE_DIR,
+)
+
+print(f'\n  Test-Loss:      {test_loss:.4f}')
+print(f'  Test-Accuracy:  {test_acc:.4f}')
+print(f'  Test-Recall:    {test_recall:.4f}')
+print(f'  Test-F1 Score:  {test_f1:.4f}')
+print(f'  Test-Precision: {test_prec:.4f}')
+print(f'  → Modell gespeichert: {BEST_MODEL_CHECKPOINT_PATH}')
+
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 5))
-fig.suptitle("Bestes Modell – Learning Curves")
+fig.suptitle('Bestes Modell – Learning Curves')
 
-epochs_range = range(1, len(history["loss"]) + 1)
-ax1.plot(epochs_range, history["loss"],     label="Train Loss")
-ax1.plot(epochs_range, history["val_loss"], label="Val Loss", linestyle="--")
-ax1.set_xlabel("Epoch"); ax1.set_ylabel("Loss"); ax1.legend()
+epochs_range = range(1, len(history['loss']) + 1)
+ax1.plot(epochs_range, history['loss'], label='Train Loss')
+ax1.plot(epochs_range, history['val_loss'], label='Val Loss', linestyle='--')
+ax1.set_xlabel('Epoch')
+ax1.set_ylabel('Loss')
+ax1.legend()
 
-ax2.plot(epochs_range, history["accuracy"],     label="Train Accuracy")
-ax2.plot(epochs_range, history["val_accuracy"], label="Val Accuracy", linestyle="--")
-ax2.set_xlabel("Epoch"); ax2.set_ylabel("Accuracy"); ax2.legend()
+ax2.plot(epochs_range, history['accuracy'], label='Train Accuracy')
+ax2.plot(epochs_range, history['val_accuracy'], label='Val Accuracy', linestyle='--')
+ax2.set_xlabel('Epoch')
+ax2.set_ylabel('Accuracy')
+ax2.legend()
 
 plt.tight_layout()
-plt.show()
+learning_curve_path = save_figure_png(fig, Path(artifact_dir) / 'learning_curves.png')
+print(f'  → Plot gespeichert: {learning_curve_path}')

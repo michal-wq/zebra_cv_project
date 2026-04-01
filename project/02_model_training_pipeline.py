@@ -201,3 +201,176 @@ def main():
 
 if __name__ == "__main__":
     main()
+"""Trainiert ein MLP-Basismodell auf den Bilddaten und speichert den Verlauf als Plot."""
+
+import matplotlib.pyplot as plt
+import numpy as np
+import optuna
+import seaborn as sns
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from optuna.pruners import MedianPruner
+from optuna.samplers import TPESampler
+from pathlib import Path
+from torch.utils.data import DataLoader
+from torchvision import datasets, transforms
+from typing import Dict, Tuple
+
+from helpers import read_data, save_image
+from models import MLP
+
+
+if torch.cuda.is_available():
+    DEVICE = torch.device('cuda')
+elif torch.backends.mps.is_available():
+    DEVICE = torch.device('mps')
+else:
+    DEVICE = torch.device('cpu')
+print(f'Verwende Gerät: {DEVICE}')
+
+TRAIN_PATH = 'data/train'
+VAL_PATH = 'data/val'
+TEST_PATH = 'data/test'
+
+
+def infer_input_config(loader):
+    """Leitet Eingabeform, flache Eingabegröße und Klassenanzahl aus einem Batch ab."""
+    x, y = next(iter(loader))
+    input_shape = tuple(x.shape[1:])
+    input_size_mlp = int(torch.tensor(input_shape).prod().item())
+    num_classes = int(y.max().item() + 1)
+    return {
+        'input_shape': input_shape,
+        'input_size_mlp': input_size_mlp,
+        'num_classes': num_classes,
+    }
+
+
+def make_dataloaders(
+    data_root: str = 'data',
+    image_size: int = 224,
+    batch_size: int = 4,
+    num_workers: int = 4,
+) -> Tuple[Dict[str, DataLoader], Dict[str, int], Dict[int, str]]:
+    """Erzeugt DataLoader für Train/Val/Test und gibt Klassen-Mappings zurück."""
+    data_root = Path(data_root)
+
+    train_tfms = transforms.Compose([
+        transforms.Resize((image_size, image_size)),
+        transforms.ToTensor(),
+    ])
+
+    eval_tfms = transforms.Compose([
+        transforms.Resize((image_size, image_size)),
+        transforms.ToTensor(),
+    ])
+
+    datasets_by_split = {
+        'train': datasets.ImageFolder(data_root / 'train', transform=train_tfms),
+        'val': datasets.ImageFolder(data_root / 'val', transform=eval_tfms),
+        'test': datasets.ImageFolder(data_root / 'test', transform=eval_tfms),
+    }
+
+    dataloaders = {
+        'train': DataLoader(
+            datasets_by_split['train'],
+            batch_size=batch_size,
+            shuffle=True,
+            num_workers=num_workers,
+            pin_memory=torch.cuda.is_available(),
+        ),
+        'val': DataLoader(
+            datasets_by_split['val'],
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=num_workers,
+            pin_memory=torch.cuda.is_available(),
+        ),
+        'test': DataLoader(
+            datasets_by_split['test'],
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=num_workers,
+            pin_memory=torch.cuda.is_available(),
+        ),
+    }
+
+    class_to_idx = datasets_by_split['train'].class_to_idx
+    idx_to_class = {idx: name for name, idx in class_to_idx.items()}
+
+    return dataloaders, class_to_idx, idx_to_class
+
+
+def main():
+    """Trainiert ein MLP und speichert den Trainings- und Validierungsverlust als PNG."""
+    torch.manual_seed(77)
+    dataloaders, class_to_idx, idx_to_class = make_dataloaders(num_workers=0)
+
+    train_loader = dataloaders['train']
+    val_loader = dataloaders['val']
+    train_features, train_labels = next(iter(train_loader))
+
+    cfg = infer_input_config(train_loader)
+    num_classes = len(class_to_idx)
+    input_size = cfg['input_size_mlp']
+    layer_sizes = [input_size, 512, 128, num_classes]
+    learning_rate = 1e-3
+    epochs = 2
+
+    print(f'input_size: {input_size} | num_classes: {num_classes}')
+    model = MLP(layer_sizes=layer_sizes, activation='relu', dropout_rate=0.2).to(DEVICE)
+    optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-4)
+    loss_fn = nn.CrossEntropyLoss()
+
+    train_losses = []
+    val_losses = []
+    for epoch in range(epochs):
+        train_loss = 0.0
+        val_loss = 0.0
+        i = 0
+
+        for x_train_batch, y_train_batch in train_loader:
+            x_train_batch = x_train_batch.to(DEVICE)
+            y_train_batch = y_train_batch.to(DEVICE).long()
+
+            y_train_batch_pred = model(x_train_batch)
+            loss = loss_fn(y_train_batch_pred, y_train_batch)
+            loss.backward()
+            optimizer.step()
+            optimizer.zero_grad()
+
+            train_loss += loss.item()
+            if i > 30:
+                break
+            i += 1
+
+        train_losses.append(train_loss / len(train_loader))
+
+        with torch.no_grad():
+            for x_val_batch, y_val_batch in val_loader:
+                x_val_batch, y_val_batch = x_val_batch.to(DEVICE), y_val_batch.to(DEVICE)
+                y_val_batch_pred = model(x_val_batch)
+                loss = loss_fn(y_val_batch_pred, y_val_batch)
+                val_loss += loss.item()
+
+        val_losses.append(val_loss / len(val_loader))
+        print(
+            f'Epoch {epoch + 1}/{epochs}, '
+            f'Train Loss: {train_losses[-1]:.4f} ,Val Loss: {val_losses[-1]:.4f}'
+        )
+
+    plot_name = 'model_data/MLP_training.png'
+    plt.figure()
+    sns.lineplot(x=list(range(epochs)), y=train_losses)
+    sns.lineplot(x=list(range(epochs)), y=val_losses)
+    plt.xticks(range(epochs))
+    plt.xlabel('Epoche [-]')
+    plt.ylabel('Verlust [-]')
+    plt.title('Trainingsverlust und Epochen')
+    plt.savefig(plot_name)
+    print(f'Training finished, plot saved to {plot_name}')
+
+
+if __name__ == '__main__':
+    main()
