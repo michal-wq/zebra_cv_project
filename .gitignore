@@ -1,1 +1,38 @@
 swissimage_annotator/
+
+# Daten (lokal, nicht versionieren)
+raw_data/
+project/data/
+project/aug_data_try/
+
+# Trainingsartefakte
+project/trained_models/
+project/model_data/
+*.pt
+*.pth
+
+# Cluster-/Job-Logs
+project/SLURM_SUBMIT_DIR/
+*.out
+*.err
+
+# Python Cache / Build
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtuelle Umgebungen
+.venv/
+venv/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Betriebssystem-Dateien
+.DS_Store
+Thumbs.db

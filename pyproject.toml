@@ -7,6 +7,7 @@ dependencies = [
     "optuna",
     "pandas",
     "psutil",
+    "scikit-learn>=1.8.0",
     "scipy",
     "seaborn",
     "torch>=2.7.1",
