@@ -1,14 +1,22 @@
 [project]
 name = "dl-data-zebra"
 version = "0.1.0"
-requires-python = ">=3.11"
+requires-python = ">=3.12,<3.13"
 dependencies = [
-    "matplotlib>=3.10.8",
-    "numpy>=2.4.4",
-    "optuna>=4.8.0",
-    "pandas>=3.0.2",
-    "scipy>=1.17.1",
-    "seaborn>=0.13.2",
-    "torch>=2.11.0",
-    "torchvision>=0.26.0",
+    "matplotlib",
+    "optuna",
+    "pandas",
+    "psutil",
+    "scipy",
+    "seaborn",
+    "torch>=2.7.1",
+    "torchvision>=0.22.1",
 ]
+
+[[tool.uv.index]]
+url = "https://download.pytorch.org/whl/cu118"
+priority = "primary"
+
+[[tool.uv.index]]
+url = "https://pypi.org/simple"
+priority = "supplemental"

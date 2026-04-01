@@ -57,8 +57,7 @@ def train_one_epoch(
     loader:     DataLoader,
     criterion:  nn.Module,
     optimizer:  optim.Optimizer,
-    regularizer: str | None,
-    DEVICE: str
+    regularizer: str | None
 ) -> tuple[float, float]:
     model.train()
     total_loss, correct, n = 0.0, 0, 0
@@ -83,13 +82,12 @@ def evaluate(
     model:     nn.Module,
     loader:    DataLoader,
     criterion: nn.Module,
-    device: str
 ) -> tuple[float, float]:
     model.eval()
     total_loss, correct, n = 0.0, 0, 0
 
     for xb, yb in loader:
-        xb, yb = xb.to(device), yb.to(device)
+        xb, yb = xb.to(DEVICE), yb.to(DEVICE)
         logits = model(xb)
         loss   = criterion(logits, yb)
 
@@ -118,7 +116,7 @@ input_size = cfg['input_size_mlp']
 
 print('good')
 
-N_TRIALS = 50
+N_TRIALS = 3
 EPOCHS   = 30   
 
 def objective(trial: optuna.Trial) -> float:
@@ -161,8 +159,8 @@ def objective(trial: optuna.Trial) -> float:
     patience      = 5   # Early Stopping
 
     for epoch in range(EPOCHS):
-        train_one_epoch(model, train_loader, criterion, optimizer, regularizer, DEVICE)
-        _, val_acc = evaluate(model, val_loader, criterion, DEVICE)
+        train_one_epoch(model, train_loader, criterion, optimizer, regularizer)
+        _, val_acc = evaluate(model, val_loader, criterion)
 
         # Early Stopping
         if val_acc > best_val_acc:
@@ -179,6 +177,8 @@ def objective(trial: optuna.Trial) -> float:
             raise optuna.exceptions.TrialPruned()
 
     return best_val_acc
+
+
 
 sampler = TPESampler(seed=77)
 pruner  = MedianPruner(n_startup_trials=5, n_warmup_steps=5)
@@ -269,7 +269,7 @@ for epoch in range(1, 101):
     tr_loss, tr_acc = train_one_epoch(
         best_model, train_loader, criterion, best_optimizer, p['regularizer']
     )
-    val_loss, val_acc = evaluate(best_model, val_loader, criterion, DEVICE)
+    val_loss, val_acc = evaluate(best_model, val_loader, criterion)
 
     history['loss'].append(tr_loss)
     history['accuracy'].append(tr_acc)
@@ -294,7 +294,7 @@ for epoch in range(1, 101):
 
 # Besten Checkpoint laden & auf Testset evaluieren
 best_model.load_state_dict(torch.load(best_model_save_path))
-test_loss, test_acc = evaluate(best_model, test_loader, criterion, DEVICE)
+test_loss, test_acc = evaluate(best_model, test_loader, criterion)
 print(f'\n  Test-Loss:     {test_loss:.4f}')
 print(f'  Test-Accuracy: {test_acc:.4f}')
 print('  → Modell gespeichert: best_model_optuna.pt')
