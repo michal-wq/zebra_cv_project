@@ -113,7 +113,7 @@ Für dieses Projekt reicht **uv** mit:
 - `pyproject.toml`
 - `uv.lock`
 
-Eine `requirements.txt` ist optional und nur für Nutzer ohne `uv` relevant.
+sonst shit aint gonna work (probably not gonna work anyway)
 
 ## GitHub-Hinweise
 
