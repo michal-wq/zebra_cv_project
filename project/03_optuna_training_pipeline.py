@@ -30,7 +30,7 @@ SEED = 77
 
 ARTIFACT_BASE_DIR = 'trained_models'
 MODEL_NAME = 'MLP_optuna_best'
-BEST_MODEL_CHECKPOINT_PATH = 'trained_models/MLP_base_model_optuna.pt'
+BEST_MODEL_CHECKPOINT_PATH = 'trained_models/MLP_base_model_optuna_cp.pt'
 
 N_TRIALS = 50
 OPTUNA_EPOCHS = 15
@@ -67,6 +67,29 @@ def check_device():
 
 torch.manual_seed(SEED)
 DEVICE = check_device()
+
+
+def save_training_checkpoint(
+    path: str | Path,
+    model: nn.Module,
+    optimizer: optim.Optimizer,
+    epoch: int,
+    best_val_acc: float,
+    best_params: dict,
+) -> None:
+    """Speichert den aktuellen besten Trainingszustand als Checkpoint."""
+    checkpoint_path = Path(path)
+    checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+    torch.save(
+        {
+            'epoch': epoch,
+            'best_val_acc': best_val_acc,
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'best_params': best_params,
+        },
+        checkpoint_path,
+    )
 
 
 def compute_l1_penalty(model: nn.Module, lambda_: float = 1e-4) -> torch.Tensor:
@@ -352,14 +375,22 @@ for epoch in range(FINAL_TRAIN_EPOCHS):
     if val_acc > best_val_acc:
         best_val_acc = val_acc
         patience_ct = 0
-        torch.save(best_model.state_dict(), BEST_MODEL_CHECKPOINT_PATH)
+        save_training_checkpoint(
+            path=BEST_MODEL_CHECKPOINT_PATH,
+            model=best_model,
+            optimizer=best_optimizer,
+            epoch=epoch,
+            best_val_acc=best_val_acc,
+            best_params=best.params,
+        )
     else:
         patience_ct += 1
         if patience_ct >= FINAL_PATIENCE:
             print(f'  → Early Stopping nach Epoch {epoch}.')
             break
 
-best_model.load_state_dict(torch.load(BEST_MODEL_CHECKPOINT_PATH))
+best_checkpoint = torch.load(BEST_MODEL_CHECKPOINT_PATH, map_location=DEVICE)
+best_model.load_state_dict(best_checkpoint['model_state_dict'])
 metrics = evaluate(best_model, test_loader, criterion)
 
 test_loss = metrics['loss']
@@ -386,7 +417,7 @@ print(f'  Test-Accuracy:  {test_acc:.4f}')
 print(f'  Test-Recall:    {test_recall:.4f}')
 print(f'  Test-F1 Score:  {test_f1:.4f}')
 print(f'  Test-Precision: {test_prec:.4f}')
-print(f'  → Modell gespeichert: {BEST_MODEL_CHECKPOINT_PATH}')
+print(f"  → Modell gespeichert: {BEST_MODEL_CHECKPOINT_PATH} (Epoch {best_checkpoint['epoch']}, val_acc={best_checkpoint['best_val_acc']:.4f})")
 
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 5))
 fig.suptitle('Bestes Modell – Learning Curves')
