@@ -18,8 +18,8 @@ from optuna.samplers import TPESampler
 from sklearn.metrics import f1_score, precision_score, recall_score
 from torch.utils.data import DataLoader
 
-from models import MLP
-from prep_training import infer_input_config, make_dataloaders
+from models import SimpleCNN
+from prep_training import make_dataloaders
 from training_functions import save_best_model_artifacts
 
 
@@ -29,15 +29,15 @@ from training_functions import save_best_model_artifacts
 SEED = 77
 
 ARTIFACT_BASE_DIR = 'trained_models'
-MODEL_NAME = 'MLP_optuna_best'
-BEST_MODEL_CHECKPOINT_PATH = 'trained_models/MLP_base_model_optuna_cp.pt'
+MODEL_NAME = 'Simple_CNN'
+BEST_MODEL_CHECKPOINT_PATH = 'trained_models/Simple_CNN.pt'
 
-N_TRIALS = 50
-OPTUNA_EPOCHS = 15
-OPTUNA_PATIENCE = 5
+N_TRIALS = 40
+OPTUNA_EPOCHS = 8
+OPTUNA_PATIENCE = 3
 OPTUNA_PRUNER_STARTUP_TRIALS = 5
 OPTUNA_PRUNER_WARMUP_STEPS = 5
-STUDY_NAME = 'zebra_giga_shit_model_optimization'
+STUDY_NAME = 'CNN_zebra_model_optimization'
 
 FINAL_TRAIN_EPOCHS = 100
 FINAL_PATIENCE = 10
@@ -207,8 +207,8 @@ train_loader = dataloaders['train']
 val_loader = dataloaders['val']
 test_loader = dataloaders['test']
 
-cfg = infer_input_config(train_loader)
-input_size = cfg['input_size_mlp']
+print(f'Train Bilder: {len(train_loader)}')
+
 
 
 def objective(trial: optuna.Trial) -> float:
@@ -225,7 +225,12 @@ def objective(trial: optuna.Trial) -> float:
         for i in range(n_layers)
     ]
 
-    model = MLP(input_size, n_layers, layer_sizes, activation, dropout_rate).to(DEVICE)
+    model = SimpleCNN(
+        n_layers=n_layers,
+        layer_sizes=layer_sizes,
+        activation=activation,
+        dropout_rate=dropout_rate,
+    ).to(DEVICE)
 
     optimizer_map = {
         'adam': optim.Adam,
@@ -313,8 +318,7 @@ print('=' * 60)
 p = best.params
 layer_sizes = [p[f'n_nodes_layer_{i}'] for i in range(p['n_layers'])]
 
-best_model = MLP(
-    input_size,
+best_model = SimpleCNN(
     n_layers=p['n_layers'],
     layer_sizes=layer_sizes,
     activation=p['activation'],
