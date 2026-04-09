@@ -213,15 +213,27 @@ print(f'Train Bilder: {len(train_loader)}')
 
 def objective(trial: optuna.Trial) -> float:
     """Definiert einen Optuna-Trial und gibt den besten Validierungs-Loss zurück."""
-    n_layers = trial.suggest_int('n_layers', 1, 5)
-    activation = trial.suggest_categorical('activation', ['relu', 'tanh', 'sigmoid'])
+    n_layers = trial.suggest_int('n_layers', 3, 8)
+    activation = trial.suggest_categorical('activation', ['relu', 'tanh'])
     optimizer_name = trial.suggest_categorical('optimizer', ['adam', 'sgd', 'rmsprop', 'adagrad'])
     learning_rate = trial.suggest_float('learning_rate', 1e-4, 1e-1, log=True)
-    dropout_rate = trial.suggest_float('dropout_rate', 0.0, 0.5, step=0.1)
+    dropout_rate = trial.suggest_float('dropout_rate', 0.0, 0.5, step=0.05)
     regularizer = trial.suggest_categorical('regularizer', [None, 'l1', 'l2', 'l1_l2'])
 
+    # CNN-spezifische Hyperparameter
+    kernel_size = trial.suggest_categorical('kernel_size', [3, 5])
+    pool_type = trial.suggest_categorical('pool_type', ['max', 'avg'])
+    use_batchnorm = trial.suggest_categorical('use_batchnorm', [True, False])
+    cnn_dropout_rate = trial.suggest_float('cnn_dropout_rate', 0.0, 0.4, step=0.05)
+
+    conv_channels = (
+        trial.suggest_int('conv_channels_1', 16, 64, step=16),
+        trial.suggest_int('conv_channels_2', 32, 128, step=32),
+        trial.suggest_int('conv_channels_3', 64, 256, step=64),
+    )
+
     layer_sizes = [
-        trial.suggest_int(f'n_nodes_layer_{i}', 16, 256, step=16)
+        trial.suggest_int(f'n_nodes_layer_{i}', 64, 512, step=32)
         for i in range(n_layers)
     ]
 
@@ -230,6 +242,11 @@ def objective(trial: optuna.Trial) -> float:
         layer_sizes=layer_sizes,
         activation=activation,
         dropout_rate=dropout_rate,
+        conv_channels=conv_channels,
+        kernel_size=kernel_size,
+        pool_type=pool_type,
+        use_batchnorm=use_batchnorm,
+        cnn_dropout_rate=cnn_dropout_rate,
     ).to(DEVICE)
 
     optimizer_map = {
@@ -317,12 +334,22 @@ print('=' * 60)
 
 p = best.params
 layer_sizes = [p[f'n_nodes_layer_{i}'] for i in range(p['n_layers'])]
+conv_channels = (
+    p['conv_channels_1'],
+    p['conv_channels_2'],
+    p['conv_channels_3'],
+)
 
 best_model = SimpleCNN(
     n_layers=p['n_layers'],
     layer_sizes=layer_sizes,
     activation=p['activation'],
     dropout_rate=p['dropout_rate'],
+    conv_channels=conv_channels,
+    kernel_size=p['kernel_size'],
+    pool_type=p['pool_type'],
+    use_batchnorm=p['use_batchnorm'],
+    cnn_dropout_rate=p['cnn_dropout_rate'],
 ).to(DEVICE)
 
 optimizer_map = {

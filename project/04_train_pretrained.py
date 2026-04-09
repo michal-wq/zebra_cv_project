@@ -2,13 +2,15 @@
 
 from pathlib import Path
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from sklearn.metrics import confusion_matrix, f1_score, precision_score, recall_score
 from torchvision import datasets, models, transforms
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-
+from training_functions import save_best_model_artifacts
 
 SEED = 77
 IMAGE_SIZE = 224
@@ -23,6 +25,7 @@ TRAIN_DIR = DATA_ROOT / "augmented_train_data"
 VAL_DIR = DATA_ROOT / "val"
 TEST_DIR = DATA_ROOT / "test"
 
+MODEL_NAME = "ResNet18_Finetune"
 MODEL_DIR = Path("trained_models")
 MODEL_DIR.mkdir(parents=True, exist_ok=True)
 CHECKPOINT_PATH = MODEL_DIR / "resnet18_finetune_checkpoint.pt"
@@ -91,11 +94,9 @@ def build_model(num_classes: int, device: torch.device) -> nn.Module:
     weights = models.ResNet18_Weights.DEFAULT
     model = models.resnet18(weights=weights)
 
-    # Freeze all layers first
     for p in model.parameters():
         p.requires_grad = False
 
-    # Unfreeze last residual block + classifier for fine-tuning
     for p in model.layer4.parameters():
         p.requires_grad = True
 
@@ -120,6 +121,22 @@ def evaluate(model: nn.Module, loader: DataLoader, criterion: nn.Module, device:
             n += xb.size(0)
 
     return {"loss": total_loss / n, "accuracy": correct / n}
+
+
+@torch.no_grad()
+def collect_predictions(model: nn.Module, loader: DataLoader, device: torch.device) -> tuple[np.ndarray, np.ndarray]:
+    model.eval()
+    all_targets = []
+    all_preds = []
+
+    for xb, yb in loader:
+        xb = xb.to(device)
+        logits = model(xb)
+        preds = logits.argmax(dim=1).cpu().numpy()
+        all_preds.extend(preds)
+        all_targets.extend(yb.numpy())
+
+    return np.array(all_targets), np.array(all_preds)
 
 
 def train_one_epoch(
@@ -162,6 +179,9 @@ def main() -> None:
         )
 
     loaders, num_classes, class_to_idx = build_dataloaders()
+    idx_to_class = {idx: name for name, idx in class_to_idx.items()}
+    class_labels = [idx_to_class[i] for i in range(len(idx_to_class))]
+
     model = build_model(num_classes=num_classes, device=device)
 
     criterion = nn.CrossEntropyLoss()
@@ -235,16 +255,61 @@ def main() -> None:
 
     best_ckpt = torch.load(BEST_MODEL_PATH, map_location=device)
     model.load_state_dict(best_ckpt["model_state_dict"])
+
     test_metrics = evaluate(model, loaders["test"], criterion, device)
+    y_true, y_pred = collect_predictions(model, loaders["test"], device)
+
+    test_precision_weighted = precision_score(y_true, y_pred, average="weighted", zero_division=0)
+    test_recall_weighted = recall_score(y_true, y_pred, average="weighted", zero_division=0)
+    test_f1_weighted = f1_score(y_true, y_pred, average="weighted", zero_division=0)
+    test_precision_macro = precision_score(y_true, y_pred, average="macro", zero_division=0)
+    test_recall_macro = recall_score(y_true, y_pred, average="macro", zero_division=0)
+    test_f1_macro = f1_score(y_true, y_pred, average="macro", zero_division=0)
+
+    cm = confusion_matrix(y_true, y_pred, labels=list(range(len(class_labels))))
 
     final_results = {
-        "test_loss": test_metrics["loss"],
-        "test_accuracy": test_metrics["accuracy"],
-        "best_val_accuracy": best_ckpt["best_val_acc"],
-        "best_epoch": best_ckpt["epoch"] + 1,
+        "test_loss": float(test_metrics["loss"]),
+        "test_accuracy": float(test_metrics["accuracy"]),
+        "test_precision_weighted": float(test_precision_weighted),
+        "test_recall_weighted": float(test_recall_weighted),
+        "test_f1_weighted": float(test_f1_weighted),
+        "test_precision_macro": float(test_precision_macro),
+        "test_recall_macro": float(test_recall_macro),
+        "test_f1_macro": float(test_f1_macro),
+        "best_val_accuracy": float(best_ckpt["best_val_acc"]),
+        "best_epoch": int(best_ckpt["epoch"] + 1),
         "checkpoint_path": str(CHECKPOINT_PATH),
         "best_model_path": str(BEST_MODEL_PATH),
+        "class_labels": class_labels,
+        "confusion_matrix": cm.tolist(),
     }
+
+    run_params = {
+        "seed": SEED,
+        "image_size": IMAGE_SIZE,
+        "batch_size": BATCH_SIZE,
+        "num_workers": NUM_WORKERS,
+        "num_epochs": NUM_EPOCHS,
+        "learning_rate": LEARNING_RATE,
+        "weight_decay": WEIGHT_DECAY,
+    }
+
+    artifact_dir = save_best_model_artifacts(
+        model=model,
+        y_true=y_true,
+        y_pred=y_pred,
+        model_name=MODEL_NAME,
+        score=test_metrics["accuracy"],
+        params=run_params,
+        history=history,
+        base_dir=str(MODEL_DIR),
+        results=final_results,
+        class_labels=class_labels,
+        save_history=False,
+    )
+
+    final_results["artifact_dir"] = str(artifact_dir)
     final_results
 
 

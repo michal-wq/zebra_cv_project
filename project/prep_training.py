@@ -41,7 +41,7 @@ def make_dataloaders(
     ])
 
     datasets_by_split = {
-        'train': datasets.ImageFolder(data_root / 'train', transform=train_tfms),
+        'train': datasets.ImageFolder(data_root / 'augmented_train_data', transform=train_tfms),
         'val': datasets.ImageFolder(data_root / 'val', transform=eval_tfms),
         'test': datasets.ImageFolder(data_root / 'test', transform=eval_tfms),
     }

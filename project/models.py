@@ -35,7 +35,7 @@ class MLP(nn.Module):
 
 
 class SimpleCNN(nn.Module):
-    """Einfaches CNN mit Optuna-kompatibler MLP-Head-Signatur."""
+    """Einfaches CNN mit Optuna-kompatiblen CNN- und MLP-Head-Hyperparametern."""
 
     def __init__(
         self,
@@ -45,13 +45,18 @@ class SimpleCNN(nn.Module):
         activation: str = 'relu',
         dropout_rate: float = 0.0,
         num_classes: int = 10,
+        conv_channels: tuple[int, int, int] = (32, 64, 128),
+        kernel_size: int = 3,
+        pool_type: str = 'max',
+        use_batchnorm: bool = False,
+        cnn_dropout_rate: float = 0.0,
     ):
         super().__init__()
 
         activation_map = {
-            'relu': nn.ReLU(),
-            'tanh': nn.Tanh(),
-            'sigmoid': nn.Sigmoid(),
+            'relu': nn.ReLU,
+            'tanh': nn.Tanh,
+            'sigmoid': nn.Sigmoid,
         }
         if activation not in activation_map:
             raise ValueError(f'Unbekannte Aktivierung: {activation}')
@@ -61,27 +66,53 @@ class SimpleCNN(nn.Module):
         if n_layers != len(layer_sizes):
             raise ValueError('n_layers muss der Länge von layer_sizes entsprechen.')
 
+        if len(conv_channels) != 3:
+            raise ValueError('conv_channels muss genau drei Werte enthalten.')
+        if kernel_size not in (3, 5):
+            raise ValueError('kernel_size muss 3 oder 5 sein.')
+        if pool_type not in ('max', 'avg'):
+            raise ValueError("pool_type muss 'max' oder 'avg' sein.")
+
         _ = input_size
 
-        self.features = nn.Sequential(
-            nn.Conv2d(3, 16, kernel_size=3, padding=1),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=2),
-            nn.Conv2d(16, 32, kernel_size=3, padding=1),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=2),
-            nn.Conv2d(32, 64, kernel_size=3, padding=1),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=2),
+        activation_cls = activation_map[activation]
+        padding = kernel_size // 2
+
+        def make_activation(inplace: bool = False) -> nn.Module:
+            if activation == 'relu':
+                return activation_cls(inplace=inplace)
+            return activation_cls()
+
+        def pool_layer() -> nn.Module:
+            if pool_type == 'max':
+                return nn.MaxPool2d(kernel_size=2)
+            return nn.AvgPool2d(kernel_size=2)
+
+        feature_layers: list[nn.Module] = []
+        in_channels = 3
+        for out_channels in conv_channels:
+            feature_layers.append(
+                nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, padding=padding)
+            )
+            if use_batchnorm:
+                feature_layers.append(nn.BatchNorm2d(out_channels))
+            feature_layers.append(make_activation(inplace=True))
+            feature_layers.append(pool_layer())
+            if cnn_dropout_rate > 0.0:
+                feature_layers.append(nn.Dropout2d(cnn_dropout_rate))
+            in_channels = out_channels
+
+        feature_layers.extend([
             nn.AdaptiveAvgPool2d((1, 1)),
             nn.Flatten(),
-        )
+        ])
+        self.features = nn.Sequential(*feature_layers)
 
-        head_layers = []
-        in_features = 64
+        head_layers: list[nn.Module] = []
+        in_features = conv_channels[-1]
         for hidden_size in layer_sizes:
             head_layers.append(nn.Linear(in_features, hidden_size))
-            head_layers.append(activation_map[activation])
+            head_layers.append(make_activation())
             if dropout_rate > 0.0:
                 head_layers.append(nn.Dropout(dropout_rate))
             in_features = hidden_size
