@@ -6,7 +6,6 @@ project/data/
 project/aug_data_try/
 
 # Trainingsartefakte
-project/trained_models/
 project/model_data/
 *.pt
 *.pth
