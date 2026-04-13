@@ -25,8 +25,8 @@ SEED = 77
 IMAGE_SIZE = 224
 BATCH_SIZE = 128
 NUM_WORKERS = 16
-NUM_EPOCHS = 20
-LEARNING_RATE = 1e-5
+NUM_EPOCHS = 100
+LEARNING_RATE = 1e-6
 WEIGHT_DECAY = 1e-4
 
 DATA_ROOT = Path('data')
@@ -34,11 +34,11 @@ TRAIN_DIR = DATA_ROOT / 'train'
 VAL_DIR = DATA_ROOT / 'val'
 TEST_DIR = DATA_ROOT / 'test'
 
-MODEL_NAME = 'ResNet34_Finetune_OnTheFlyAug'
+MODEL_NAME = 'resnet152_a_Finetune_OnTheFlyAug_c_class_weights_true'
 MODEL_DIR = Path('trained_models')
 MODEL_DIR.mkdir(parents=True, exist_ok=True)
-CHECKPOINT_PATH = MODEL_DIR / 'resnet34_finetune_onthefly_checkpoint.pt'
-BEST_MODEL_PATH = MODEL_DIR / 'resnet34_finetune_onthefly_best.pt'
+CHECKPOINT_PATH = MODEL_DIR / 'resnet152_a_finetune_onthefly_checkpoint.pt'
+BEST_MODEL_PATH = MODEL_DIR / 'resnet152_a_finetune_onthefly_best.pt'
 
 
 # =========================
@@ -46,8 +46,8 @@ BEST_MODEL_PATH = MODEL_DIR / 'resnet34_finetune_onthefly_best.pt'
 # =========================
 # Oversampling
 CLASS_REPEAT_FACTORS: dict[str, int] = {
-    'y': 10,
-    'n': 2,
+    'y': 12,
+    'n': 3,
 }
 
 # Augmentierung
@@ -55,16 +55,16 @@ CLASS_AUGMENTATION_CONFIG: dict[str, dict] = {
     'y': {
         'apply_prob': 1.0,
         'hflip_prob': 0.5,
-        'rotation_deg': 25,
-        'perspective_prob': 0.35,
+        'rotation_deg': 6,
+        'perspective_prob': 0.2,
         'blur_prob': 0.20,
         'color_jitter': (0.25, 0.25, 0.25, 0.10),
     },
     'n': {
         'apply_prob': 1.0,
         'hflip_prob': 0.5,
-        'rotation_deg': 25,
-        'perspective_prob': 0.35,
+        'rotation_deg': 6,
+        'perspective_prob': 0.2,
         'blur_prob': 0.20,
         'color_jitter': (0.25, 0.25, 0.25, 0.10),
     },
@@ -72,7 +72,7 @@ CLASS_AUGMENTATION_CONFIG: dict[str, dict] = {
 
 # 3) Optionale klassengewichtete Loss-Funktion.
 #    Falls True: Klassen mit weniger ORIGINAL-Samples erhalten höheres Gewicht.
-USE_CLASS_WEIGHTS = False
+USE_CLASS_WEIGHTS = True
 
 
 def set_seed(seed: int) -> None:
@@ -262,8 +262,9 @@ def build_dataloaders() -> tuple[dict[str, DataLoader], int, dict[str, int], Cla
 
 
 def build_model(num_classes: int, device: torch.device) -> nn.Module:
-    weights = models.ResNet34_Weights.DEFAULT
-    model = models.resnet34(weights=weights)
+    weights = models.ResNet152_Weights.DEFAULT
+    model = models.resnet152(weights=weights)
+
 
     for p in model.parameters():
         p.requires_grad = False
@@ -412,7 +413,7 @@ def main() -> None:
         history['val_loss'].append(val_metrics['loss'])
         history['val_acc'].append(val_metrics['accuracy'])
 
-        if val_metrics['accuracy'] > best_val_acc:
+        if val_metrics['accuracy'] >= best_val_acc:
             best_val_acc = val_metrics['accuracy']
             torch.save(
                 {
