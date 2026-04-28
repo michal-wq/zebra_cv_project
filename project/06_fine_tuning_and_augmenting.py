@@ -23,8 +23,8 @@ from training_functions import save_best_model_artifacts
 # =========================
 SEED = 77
 IMAGE_SIZE = 224
-BATCH_SIZE = 128
-NUM_WORKERS = 16
+BATCH_SIZE = 256
+NUM_WORKERS = 24
 NUM_EPOCHS = 100
 LEARNING_RATE = 1e-6
 WEIGHT_DECAY = 1e-4
@@ -34,11 +34,11 @@ TRAIN_DIR = DATA_ROOT / 'train'
 VAL_DIR = DATA_ROOT / 'val'
 TEST_DIR = DATA_ROOT / 'test'
 
-MODEL_NAME = 'resnet152_a_Finetune_OnTheFlyAug_c_class_weights_true'
+MODEL_NAME = 'resnet152_b_Finetune_OnTheFlyAug_b_class_weights_true'
 MODEL_DIR = Path('trained_models')
 MODEL_DIR.mkdir(parents=True, exist_ok=True)
-CHECKPOINT_PATH = MODEL_DIR / 'resnet152_a_finetune_onthefly_checkpoint.pt'
-BEST_MODEL_PATH = MODEL_DIR / 'resnet152_a_finetune_onthefly_best.pt'
+CHECKPOINT_PATH = MODEL_DIR / 'resnet152_b_finetune_onthefly_checkpoint.pt'
+BEST_MODEL_PATH = MODEL_DIR / 'resnet152_b_finetune_onthefly_best.pt'
 
 
 # =========================
@@ -46,29 +46,57 @@ BEST_MODEL_PATH = MODEL_DIR / 'resnet152_a_finetune_onthefly_best.pt'
 # =========================
 # Oversampling
 CLASS_REPEAT_FACTORS: dict[str, int] = {
-    'y': 12,
-    'n': 3,
+    'y': 36,
+    'n': 4,
 }
 
 # Augmentierung
-CLASS_AUGMENTATION_CONFIG: dict[str, dict] = {
+CLASS_AUGMENTATION_CONFIG = {
     'y': {
         'apply_prob': 1.0,
-        'hflip_prob': 0.5,
-        'rotation_deg': 6,
-        'perspective_prob': 0.2,
+        'hflip_prob': 0.35,
+        'rotation_deg': 8,
+        'perspective_prob': 0.30,
+        'affine_prob': 0.30,
+        'affine_deg': 6,
+        'affine_translate': (0.08, 0.08),
+        'affine_scale': (0.9, 1.1),
         'blur_prob': 0.20,
-        'color_jitter': (0.25, 0.25, 0.25, 0.10),
+        'color_jitter': (0.25, 0.25, 0.25, 0.08),
+        'grayscale_prob': 0.08,
+        'autocontrast_prob': 0.10,
+        'equalize_prob': 0.05,
+        'sharpness_prob': 0.10,
+        'sharpness_factor': 1.8,
+        'solarize_prob': 0.04,
+        'posterize_prob': 0.04,
+        'posterize_bits': 4,
+        'randaugment_prob': 0.20,
+        'randaugment_num_ops': 2,
+        'randaugment_magnitude': 6,
     },
     'n': {
-        'apply_prob': 1.0,
-        'hflip_prob': 0.5,
+        'apply_prob': 0.9,
+        'hflip_prob': 0.25,
         'rotation_deg': 6,
-        'perspective_prob': 0.2,
-        'blur_prob': 0.20,
-        'color_jitter': (0.25, 0.25, 0.25, 0.10),
+        'perspective_prob': 0.20,
+        'affine_prob': 0.20,
+        'affine_deg': 4,
+        'affine_translate': (0.05, 0.05),
+        'affine_scale': (0.95, 1.05),
+        'blur_prob': 0.12,
+        'color_jitter': (0.18, 0.18, 0.18, 0.06),
+        'grayscale_prob': 0.05,
+        'autocontrast_prob': 0.06,
+        'equalize_prob': 0.04,
+        'sharpness_prob': 0.06,
+        'sharpness_factor': 1.5,
+        'randaugment_prob': 0.10,
+        'randaugment_num_ops': 2,
+        'randaugment_magnitude': 5,
     },
 }
+
 
 # 3) Optionale klassengewichtete Loss-Funktion.
 #    Falls True: Klassen mit weniger ORIGINAL-Samples erhalten höheres Gewicht.
@@ -94,50 +122,76 @@ def get_device() -> torch.device:
 
 
 def build_class_aug_transform(cfg: dict) -> transforms.Compose | None:
-    """Erzeugt aus einer Klassenkonfiguration die Augmentierungs-Pipeline."""
     ops: list[nn.Module] = []
 
-    hflip_prob = float(cfg.get('hflip_prob', 0.0))
-    if hflip_prob > 0.0:
-        ops.append(transforms.RandomHorizontalFlip(p=hflip_prob))
+    if float(cfg.get('hflip_prob', 0.0)) > 0:
+        ops.append(transforms.RandomHorizontalFlip(p=float(cfg['hflip_prob'])))
 
-    rotation_deg = float(cfg.get('rotation_deg', 0.0))
-    if rotation_deg > 0.0:
-        ops.append(transforms.RandomRotation(degrees=rotation_deg))
+    if float(cfg.get('vflip_prob', 0.0)) > 0:
+        ops.append(transforms.RandomVerticalFlip(p=float(cfg['vflip_prob'])))
 
-    perspective_prob = float(cfg.get('perspective_prob', 0.0))
-    if perspective_prob > 0.0:
-        ops.append(
-            transforms.RandomPerspective(
-                distortion_scale=0.35,
-                p=perspective_prob,
-            )
-        )
+    if float(cfg.get('rotation_deg', 0.0)) > 0:
+        ops.append(transforms.RandomRotation(degrees=float(cfg['rotation_deg'])))
 
-    blur_prob = float(cfg.get('blur_prob', 0.0))
-    if blur_prob > 0.0:
-        ops.append(
-            transforms.RandomApply(
-                [transforms.GaussianBlur(kernel_size=5, sigma=(0.1, 2.0))],
-                p=blur_prob,
-            )
-        )
+    if float(cfg.get('perspective_prob', 0.0)) > 0:
+        ops.append(transforms.RandomPerspective(
+            distortion_scale=float(cfg.get('distortion_scale', 0.35)),
+            p=float(cfg['perspective_prob']),
+        ))
 
-    color_jitter = cfg.get('color_jitter', None)
-    if color_jitter is not None:
-        brightness, contrast, saturation, hue = color_jitter
-        ops.append(
-            transforms.ColorJitter(
-                brightness=brightness,
-                contrast=contrast,
-                saturation=saturation,
-                hue=hue,
-            )
-        )
+    if float(cfg.get('affine_prob', 0.0)) > 0:
+        ops.append(transforms.RandomApply([transforms.RandomAffine(
+            degrees=float(cfg.get('affine_deg', 0.0)),
+            translate=cfg.get('affine_translate', (0.05, 0.05)),
+            scale=cfg.get('affine_scale', (0.95, 1.05)),
+            shear=cfg.get('affine_shear', 4.0),
+        )], p=float(cfg['affine_prob'])))
 
-    if not ops:
-        return None
-    return transforms.Compose(ops)
+    if float(cfg.get('blur_prob', 0.0)) > 0:
+        ops.append(transforms.RandomApply(
+            [transforms.GaussianBlur(kernel_size=5, sigma=(0.1, 2.0))],
+            p=float(cfg['blur_prob']),
+        ))
+
+    if cfg.get('color_jitter') is not None:
+        b, c, s, h = cfg['color_jitter']
+        ops.append(transforms.ColorJitter(brightness=b, contrast=c, saturation=s, hue=h))
+
+    if float(cfg.get('grayscale_prob', 0.0)) > 0:
+        ops.append(transforms.RandomGrayscale(p=float(cfg['grayscale_prob'])))
+
+    if float(cfg.get('autocontrast_prob', 0.0)) > 0:
+        ops.append(transforms.RandomAutocontrast(p=float(cfg['autocontrast_prob'])))
+
+    if float(cfg.get('equalize_prob', 0.0)) > 0:
+        ops.append(transforms.RandomEqualize(p=float(cfg['equalize_prob'])))
+
+    if float(cfg.get('sharpness_prob', 0.0)) > 0:
+        ops.append(transforms.RandomAdjustSharpness(
+            sharpness_factor=float(cfg.get('sharpness_factor', 2.0)),
+            p=float(cfg['sharpness_prob']),
+        ))
+
+    if float(cfg.get('posterize_prob', 0.0)) > 0:
+        ops.append(transforms.RandomPosterize(
+            bits=int(cfg.get('posterize_bits', 4)),
+            p=float(cfg['posterize_prob']),
+        ))
+
+    if float(cfg.get('solarize_prob', 0.0)) > 0:
+        ops.append(transforms.RandomSolarize(
+            threshold=float(cfg.get('solarize_threshold', 128)),
+            p=float(cfg['solarize_prob']),
+        ))
+
+    if float(cfg.get('randaugment_prob', 0.0)) > 0:
+        ops.append(transforms.RandomApply([transforms.RandAugment(
+            num_ops=int(cfg.get('randaugment_num_ops', 2)),
+            magnitude=int(cfg.get('randaugment_magnitude', 7)),
+        )], p=float(cfg['randaugment_prob'])))
+
+    return transforms.Compose(ops) if ops else None
+
 
 
 class ClassAwareAugmentedDataset(Dataset):
