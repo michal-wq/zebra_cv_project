@@ -87,54 +87,69 @@ CLASS_REPEAT_FACTORS: dict[str, int] = {
     'n': 4,
 }
 
-CLASS_AUGMENTATION_CONFIG: dict[str, dict[str, Any]] = {
-    'y': {
-        'apply_prob': 0.9,
-        'hflip_prob': 0.35,
-        'rotation_deg': 8,
-        'perspective_prob': 0.30,
-        'affine_prob': 0.30,
-        'affine_deg': 6,
-        'affine_translate': (0.08, 0.08),
-        'affine_scale': (0.9, 1.1),
-        'blur_prob': 0.20,
-        'color_jitter': (0.25, 0.25, 0.25, 0.08),
-        'grayscale_prob': 0.05,
-        'autocontrast_prob': 0.01,
-        'equalize_prob': 0.02,
-        'sharpness_prob': 0.02,
-        'sharpness_factor': 1.8,
-        'solarize_prob': 0.01,
-        'posterize_prob': 0.02,
-        'posterize_bits': 4,
-        'randaugment_prob': 0.10,
-        'randaugment_num_ops': 2,
-        'randaugment_magnitude': 6,
+CLASS_AUGMENTATION_CONFIG = {
+    "y": {
+        "apply_prob": 1.0,
+
+        # Horizontal-Flip (p=0.5)
+        "hflip_prob": 0.5,
+
+        # Vertical-Flip (p=0.5)
+        "vflip_prob": 0.5,
+
+        # Rotation (limit=30, p=0.5)
+        "rotation_deg": 30,
+        "rotation_prob": 0.5,
+
+        # Median-Blur (limit=7, p=0.3)
+        "median_blur_limit": 7,
+        "median_blur_prob": 0.3,
+
+        # Gaussian-Noise (var_limit=0.38, p=0.5)
+        "gaussian_noise_var_limit": 0.38,
+        "gaussian_noise_prob": 0.5,
+
+        # Hue-Saturation-Value (h/s/v shift=10, p=0.3)
+        "hue_shift_limit": 10,
+        "sat_shift_limit": 10,
+        "val_shift_limit": 10,
+        "hsv_prob": 0.3,
+
+        # Random-Brightness-Contrast (0.2 / 0.2, p=0.3)
+        "brightness_limit": (0.2, 0.2),
+        "contrast_limit": (0.2, 0.2),
+        "brightness_contrast_prob": 0.3,
+
+        # Cutout (max_h=20, max_w=20, holes=5, p=0.5)
+        "cutout_max_height": 20,
+        "cutout_max_width": 20,
+        "cutout_num_holes": 5,
+        "cutout_prob": 0.5,
     },
-    'n': {
-        'apply_prob': 0.8,
-        'hflip_prob': 0.25,
-        'rotation_deg': 6,
-        'perspective_prob': 0.2,
-        'affine_prob': 0.20,
-        'affine_deg': 4,
-        'affine_translate': (0.05, 0.05),
-        'affine_scale': (0.95, 1.05),
-        'blur_prob': 0.20,
-        'color_jitter': (0.25, 0.25, 0.25, 0.08),
-        'grayscale_prob': 0.05,
-        'autocontrast_prob': 0.01,
-        'equalize_prob': 0.02,
-        'sharpness_prob': 0.02,
-        'sharpness_factor': 1.8,
-        'solarize_prob': 0.01,
-        'posterize_prob': 0.02,
-        'posterize_bits': 4,
-        'randaugment_prob': 0.10,
-        'randaugment_num_ops': 2,
-        'randaugment_magnitude': 6,
+    "n": {
+        "apply_prob": 1.0,
+        "hflip_prob": 0.5,
+        "vflip_prob": 0.5,
+        "rotation_deg": 30,
+        "rotation_prob": 0.5,
+        "median_blur_limit": 7,
+        "median_blur_prob": 0.3,
+        "gaussian_noise_var_limit": 0.38,
+        "gaussian_noise_prob": 0.5,
+        "hue_shift_limit": 10,
+        "sat_shift_limit": 10,
+        "val_shift_limit": 10,
+        "hsv_prob": 0.3,
+        "brightness_limit": (0.2, 0.2),
+        "contrast_limit": (0.2, 0.2),
+        "brightness_contrast_prob": 0.3,
+        "cutout_max_height": 20,
+        "cutout_max_width": 20,
+        "cutout_num_holes": 5,
+        "cutout_prob": 0.5,
     },
 }
+
 
 
 class LoadedSimpleCNN(NamedTuple):
