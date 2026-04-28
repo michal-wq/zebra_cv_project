@@ -21,6 +21,7 @@ import importlib.util
 import json
 import random
 import shutil
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -84,7 +85,16 @@ def load_module_from_path(script_path: Path, module_name: str):
         raise RuntimeError(f'Could not import module spec from {script_path}')
 
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    # Python 3.12 dataclass internals may look up the module in sys.modules
+    # while decorators are evaluated during import. Register first to avoid
+    # AttributeError for dynamically loaded modules.
+    sys.modules[module_name] = module
+    try:
+        spec.loader.exec_module(module)
+    except Exception:
+        # Keep sys.modules clean on import failure.
+        sys.modules.pop(module_name, None)
+        raise
     return module
 
 
