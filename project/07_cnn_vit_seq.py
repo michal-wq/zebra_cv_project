@@ -83,7 +83,7 @@ VIT_DROPOUT = 0.1
 # Klassen-Ungleichgewicht und On-the-fly-Augs analog zur Optuna-CNN-Pipeline,
 # aus der CNN_score-0.9924_20260426_081737 stammt.
 CLASS_REPEAT_FACTORS: dict[str, int] = {
-    'y': 36,
+    'y': 35,
     'n': 4,
 }
 
