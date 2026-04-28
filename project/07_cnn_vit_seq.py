@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json
 import random
-import re
 import warnings
 from collections import Counter
 from pathlib import Path
@@ -34,10 +33,10 @@ from training_functions import save_best_model_artifacts
 # =========================
 SEED = 77
 IMAGE_SIZE = 224
-BATCH_SIZE = 64
-NUM_WORKERS = 8
+BATCH_SIZE = 256
+NUM_WORKERS = 16
 NUM_EPOCHS = 60
-LEARNING_RATE = 2e-4
+LEARNING_RATE = 6e-4
 WEIGHT_DECAY = 1e-4
 USE_AMP = True
 GRAD_CLIP_NORM = 1.0
@@ -51,16 +50,19 @@ TRAIN_DIR = DATA_ROOT / 'train'
 VAL_DIR = DATA_ROOT / 'val'
 TEST_DIR = DATA_ROOT / 'test'
 
-MODEL_NAME = 'SimpleCNN_ViT_Hybrid_Seq'
+MODEL_NAME = 'CNN9924_ViT_Hybrid_Seq'
 MODEL_DIR = Path('trained_models')
 MODEL_DIR.mkdir(parents=True, exist_ok=True)
-CHECKPOINT_PATH = MODEL_DIR / 'cnn_vit_seq_checkpoint.pt'
-BEST_MODEL_PATH = MODEL_DIR / 'cnn_vit_seq_best.pt'
+CHECKPOINT_PATH = MODEL_DIR / 'cnn_vit_seq_cnn9924_checkpoint.pt'
+BEST_MODEL_PATH = MODEL_DIR / 'cnn_vit_seq_cnn9924_best.pt'
 
 # Optional explizit setzen. Mögliche Werte:
 # 1) Datei mit {'model_state_dict': ...} oder direktem state_dict
 # 2) Artefakt-Ordner mit model_state_dict.pt + metadata.json
 PRETRAINED_CNN_SOURCE: Path | None = None
+PRETRAINED_CNN_METADATA_PATH: Path | None = (
+    MODEL_DIR / 'CNN_score-0.9924_20260426_081737' / 'metadata.json'
+)
 
 # Falls Metadata/Checkpoint unvollständig sind, können Architekturwerte hier
 # explizit überschrieben werden.
@@ -78,28 +80,59 @@ VIT_DEPTH = 4
 VIT_MLP_RATIO = 4.0
 VIT_DROPOUT = 0.1
 
-# Klassen-Ungleichgewicht und On-the-fly-Augs (analog zu 06).
+# Klassen-Ungleichgewicht und On-the-fly-Augs analog zur Optuna-CNN-Pipeline,
+# aus der CNN_score-0.9924_20260426_081737 stammt.
 CLASS_REPEAT_FACTORS: dict[str, int] = {
-    'y': 12,
-    'n': 3,
+    'y': 36,
+    'n': 4,
 }
 
 CLASS_AUGMENTATION_CONFIG: dict[str, dict[str, Any]] = {
     'y': {
-        'apply_prob': 1.0,
-        'hflip_prob': 0.5,
-        'rotation_deg': 6,
-        'perspective_prob': 0.2,
+        'apply_prob': 0.9,
+        'hflip_prob': 0.35,
+        'rotation_deg': 8,
+        'perspective_prob': 0.30,
+        'affine_prob': 0.30,
+        'affine_deg': 6,
+        'affine_translate': (0.08, 0.08),
+        'affine_scale': (0.9, 1.1),
         'blur_prob': 0.20,
-        'color_jitter': (0.25, 0.25, 0.25, 0.10),
+        'color_jitter': (0.25, 0.25, 0.25, 0.08),
+        'grayscale_prob': 0.05,
+        'autocontrast_prob': 0.01,
+        'equalize_prob': 0.02,
+        'sharpness_prob': 0.02,
+        'sharpness_factor': 1.8,
+        'solarize_prob': 0.01,
+        'posterize_prob': 0.02,
+        'posterize_bits': 4,
+        'randaugment_prob': 0.10,
+        'randaugment_num_ops': 2,
+        'randaugment_magnitude': 6,
     },
     'n': {
-        'apply_prob': 1.0,
-        'hflip_prob': 0.5,
+        'apply_prob': 0.8,
+        'hflip_prob': 0.25,
         'rotation_deg': 6,
         'perspective_prob': 0.2,
+        'affine_prob': 0.20,
+        'affine_deg': 4,
+        'affine_translate': (0.05, 0.05),
+        'affine_scale': (0.95, 1.05),
         'blur_prob': 0.20,
-        'color_jitter': (0.25, 0.25, 0.25, 0.10),
+        'color_jitter': (0.25, 0.25, 0.25, 0.08),
+        'grayscale_prob': 0.05,
+        'autocontrast_prob': 0.01,
+        'equalize_prob': 0.02,
+        'sharpness_prob': 0.02,
+        'sharpness_factor': 1.8,
+        'solarize_prob': 0.01,
+        'posterize_prob': 0.02,
+        'posterize_bits': 4,
+        'randaugment_prob': 0.10,
+        'randaugment_num_ops': 2,
+        'randaugment_magnitude': 6,
     },
 }
 
@@ -107,10 +140,98 @@ CLASS_AUGMENTATION_CONFIG: dict[str, dict[str, Any]] = {
 class LoadedSimpleCNN(NamedTuple):
     """Container für geladenes CNN samt aufgelöster Konfiguration."""
 
-    model: SimpleCNN
+    model: nn.Module
     source_path: Path
     state_dict_path: Path
     resolved_hparams: dict[str, Any]
+
+
+class LegacySimpleCNN(nn.Module):
+    """Kompatibilitätsklasse für ältere 3-Conv-SimpleCNN-Checkpoints."""
+
+    def __init__(
+        self,
+        input_size=None,
+        n_layers: int = 1,
+        layer_sizes: list[int] | None = None,
+        activation: str = 'relu',
+        dropout_rate: float = 0.0,
+        num_classes: int = 10,
+        conv_channels: tuple[int, int, int] = (32, 64, 128),
+        kernel_size: int = 3,
+        pool_type: str = 'max',
+        use_batchnorm: bool = False,
+        cnn_dropout_rate: float = 0.0,
+    ) -> None:
+        super().__init__()
+
+        activation_map = {
+            'relu': nn.ReLU,
+            'tanh': nn.Tanh,
+            'sigmoid': nn.Sigmoid,
+        }
+        if activation not in activation_map:
+            raise ValueError(f'Unknown legacy activation: {activation}')
+        if len(conv_channels) != 3:
+            raise ValueError('Legacy conv_channels must contain exactly 3 values.')
+        if kernel_size not in (3, 5):
+            raise ValueError('Legacy kernel_size must be 3 or 5.')
+        if pool_type not in ('max', 'avg'):
+            raise ValueError("Legacy pool_type must be 'max' or 'avg'.")
+
+        _ = input_size
+        if layer_sizes is None:
+            layer_sizes = [128] * max(0, n_layers)
+        if len(layer_sizes) != n_layers:
+            raise ValueError('Legacy n_layers must match len(layer_sizes).')
+
+        activation_cls = activation_map[activation]
+        padding = kernel_size // 2
+
+        def make_activation(inplace: bool = False) -> nn.Module:
+            if activation == 'relu':
+                return activation_cls(inplace=inplace)
+            return activation_cls()
+
+        def pool_layer() -> nn.Module:
+            if pool_type == 'max':
+                return nn.MaxPool2d(kernel_size=2)
+            return nn.AvgPool2d(kernel_size=2)
+
+        feature_layers: list[nn.Module] = []
+        in_channels = 3
+        for out_channels in conv_channels:
+            feature_layers.append(
+                nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, padding=padding)
+            )
+            if use_batchnorm:
+                feature_layers.append(nn.BatchNorm2d(out_channels))
+            feature_layers.append(make_activation(inplace=True))
+            feature_layers.append(pool_layer())
+            if cnn_dropout_rate > 0.0:
+                feature_layers.append(nn.Dropout2d(cnn_dropout_rate))
+            in_channels = out_channels
+
+        feature_layers.extend([
+            nn.AdaptiveAvgPool2d((1, 1)),
+            nn.Flatten(),
+        ])
+        self.features = nn.Sequential(*feature_layers)
+
+        head_layers: list[nn.Module] = []
+        in_features = conv_channels[-1]
+        for hidden_size in layer_sizes:
+            head_layers.append(nn.Linear(in_features, hidden_size))
+            head_layers.append(make_activation())
+            if dropout_rate > 0.0:
+                head_layers.append(nn.Dropout(dropout_rate))
+            in_features = hidden_size
+
+        head_layers.append(nn.Linear(in_features, num_classes))
+        self.classifier = nn.Sequential(*head_layers)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.classifier(self.features(x))
 
 
 class CNNViTHybridSequential(nn.Module):
@@ -251,6 +372,10 @@ def build_class_aug_transform(cfg: dict[str, Any]) -> transforms.Compose | None:
     if hflip_prob > 0.0:
         ops.append(transforms.RandomHorizontalFlip(p=hflip_prob))
 
+    vflip_prob = float(cfg.get('vflip_prob', 0.0))
+    if vflip_prob > 0.0:
+        ops.append(transforms.RandomVerticalFlip(p=vflip_prob))
+
     rotation_deg = float(cfg.get('rotation_deg', 0.0))
     if rotation_deg > 0.0:
         ops.append(transforms.RandomRotation(degrees=rotation_deg))
@@ -261,6 +386,22 @@ def build_class_aug_transform(cfg: dict[str, Any]) -> transforms.Compose | None:
             transforms.RandomPerspective(
                 distortion_scale=0.35,
                 p=perspective_prob,
+            )
+        )
+
+    affine_prob = float(cfg.get('affine_prob', 0.0))
+    if affine_prob > 0.0:
+        ops.append(
+            transforms.RandomApply(
+                [
+                    transforms.RandomAffine(
+                        degrees=float(cfg.get('affine_deg', 0.0)),
+                        translate=cfg.get('affine_translate', (0.05, 0.05)),
+                        scale=cfg.get('affine_scale', (0.95, 1.05)),
+                        shear=cfg.get('affine_shear', 4.0),
+                    )
+                ],
+                p=affine_prob,
             )
         )
 
@@ -282,6 +423,59 @@ def build_class_aug_transform(cfg: dict[str, Any]) -> transforms.Compose | None:
                 contrast=contrast,
                 saturation=saturation,
                 hue=hue,
+            )
+        )
+
+    grayscale_prob = float(cfg.get('grayscale_prob', 0.0))
+    if grayscale_prob > 0.0:
+        ops.append(transforms.RandomGrayscale(p=grayscale_prob))
+
+    autocontrast_prob = float(cfg.get('autocontrast_prob', 0.0))
+    if autocontrast_prob > 0.0:
+        ops.append(transforms.RandomAutocontrast(p=autocontrast_prob))
+
+    equalize_prob = float(cfg.get('equalize_prob', 0.0))
+    if equalize_prob > 0.0:
+        ops.append(transforms.RandomEqualize(p=equalize_prob))
+
+    sharpness_prob = float(cfg.get('sharpness_prob', 0.0))
+    if sharpness_prob > 0.0:
+        ops.append(
+            transforms.RandomAdjustSharpness(
+                sharpness_factor=float(cfg.get('sharpness_factor', 2.0)),
+                p=sharpness_prob,
+            )
+        )
+
+    posterize_prob = float(cfg.get('posterize_prob', 0.0))
+    if posterize_prob > 0.0:
+        ops.append(
+            transforms.RandomPosterize(
+                bits=int(cfg.get('posterize_bits', 4)),
+                p=posterize_prob,
+            )
+        )
+
+    solarize_prob = float(cfg.get('solarize_prob', 0.0))
+    if solarize_prob > 0.0:
+        ops.append(
+            transforms.RandomSolarize(
+                threshold=float(cfg.get('solarize_threshold', 128.0)),
+                p=solarize_prob,
+            )
+        )
+
+    randaugment_prob = float(cfg.get('randaugment_prob', 0.0))
+    if randaugment_prob > 0.0:
+        ops.append(
+            transforms.RandomApply(
+                [
+                    transforms.RandAugment(
+                        num_ops=int(cfg.get('randaugment_num_ops', 2)),
+                        magnitude=int(cfg.get('randaugment_magnitude', 7)),
+                    )
+                ],
+                p=randaugment_prob,
             )
         )
 
@@ -362,17 +556,19 @@ def build_dataloaders(train_dir: Path) -> tuple[dict[str, DataLoader], int, dict
             f'{train_dir}\n{VAL_DIR}\n{TEST_DIR}'
         )
 
-    # Keine Normalisierung: konsistent mit SimpleCNN-Backbone-Training.
+    # Gleiches Normalisierungs-Schema wie in der Optuna-CNN-Pipeline.
     train_base_tfms = transforms.Compose(
         [
             transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
             transforms.ToTensor(),
+            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
         ]
     )
     eval_tfms = transforms.Compose(
         [
             transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
             transforms.ToTensor(),
+            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
         ]
     )
 
@@ -384,6 +580,8 @@ def build_dataloaders(train_dir: Path) -> tuple[dict[str, DataLoader], int, dict
     )
     val_ds = datasets.ImageFolder(VAL_DIR, transform=eval_tfms)
     test_ds = datasets.ImageFolder(TEST_DIR, transform=eval_tfms)
+    if val_ds.class_to_idx != train_ds.class_to_idx or test_ds.class_to_idx != train_ds.class_to_idx:
+        raise ValueError('Train/Val/Test class_to_idx mismatch.')
 
     loader_kwargs = make_loader_kwargs()
     loaders = {
@@ -457,24 +655,21 @@ def safe_bool(value: Any, default: bool) -> bool:
 
 
 def infer_simplecnn_hparams_from_state_dict(state_dict: dict[str, torch.Tensor]) -> dict[str, Any]:
-    """Leitet die notwendige SimpleCNN-Architektur robust aus einem state_dict ab."""
-    conv_pattern = re.compile(r'^features\.(\d+)\.weight$')
-    linear_pattern = re.compile(r'^classifier\.(\d+)\.weight$')
-    bn_pattern = re.compile(r'^features\.\d+\.running_mean$')
-
+    """Leitet CNN-Hyperparameter robust aus state_dict ab (aktuell + Legacy)."""
     conv_entries: list[tuple[int, tuple[int, ...]]] = []
     linear_entries: list[tuple[int, tuple[int, ...]]] = []
-    has_batchnorm = any(bn_pattern.match(k) for k in state_dict)
+    has_batchnorm = False
 
     for key, tensor in state_dict.items():
-        conv_match = conv_pattern.match(key)
-        if conv_match and tensor.ndim == 4:
-            conv_entries.append((int(conv_match.group(1)), tuple(tensor.shape)))
+        parts = key.split('.')
+        if len(parts) == 3 and parts[0] == 'features' and parts[2] == 'weight' and tensor.ndim == 4:
+            conv_entries.append((int(parts[1]), tuple(tensor.shape)))
             continue
-
-        linear_match = linear_pattern.match(key)
-        if linear_match and tensor.ndim == 2:
-            linear_entries.append((int(linear_match.group(1)), tuple(tensor.shape)))
+        if len(parts) == 3 and parts[0] == 'classifier' and parts[2] == 'weight' and tensor.ndim == 2:
+            linear_entries.append((int(parts[1]), tuple(tensor.shape)))
+            continue
+        if len(parts) == 3 and parts[0] == 'features' and parts[2] == 'running_mean':
+            has_batchnorm = True
 
     if not conv_entries:
         raise ValueError('Could not infer convolutional layers from state_dict.')
@@ -485,42 +680,66 @@ def infer_simplecnn_hparams_from_state_dict(state_dict: dict[str, torch.Tensor])
     linear_entries.sort(key=lambda x: x[0])
 
     conv_indices = [idx for idx, _ in conv_entries]
+    linear_indices = [idx for idx, _ in linear_entries]
     conv_channels = tuple(int(shape[0]) for _, shape in conv_entries)
     kernel_size = int(conv_entries[0][1][-1])
-
-    # Dropout-Rate selbst ist im state_dict nicht enthalten; wir schätzen nur,
-    # ob ein Dropout-Layer strukturell vorhanden war (für kompatibles Rebuild).
-    cnn_dropout_rate = 0.0
-    if len(conv_indices) >= 2:
-        observed_step = conv_indices[1] - conv_indices[0]
-        expected_step_without_dropout = 4 if has_batchnorm else 3
-        if observed_step > expected_step_without_dropout:
-            cnn_dropout_rate = 0.1
-
-    linear_indices = [idx for idx, _ in linear_entries]
     n_linear_layers = len(linear_entries)
-    n_hidden_layers = max(0, n_linear_layers - 1)
-    hidden_layer_sizes = [int(shape[0]) for _, shape in linear_entries[:-1]]
     num_classes = int(linear_entries[-1][1][0])
 
-    dropout_rate = 0.0
-    if n_hidden_layers >= 1 and len(linear_indices) >= 2:
-        observed_step = linear_indices[1] - linear_indices[0]
-        if observed_step > 2:
-            dropout_rate = 0.1
+    if len(conv_channels) == 5:
+        n_fc_layers = max(1, n_linear_layers - 1)
+        fc_hidden_size = int(linear_entries[0][1][0])
+        return {
+            'model_variant': 'current',
+            'n_fc_layers': n_fc_layers,
+            'fc_hidden_size': fc_hidden_size,
+            'activation': 'relu',
+            'dropout_rate': 0.0,
+            'conv_channels': conv_channels,
+            'kernel_size': kernel_size,
+            'pool_type': 'max',
+            'use_batchnorm': has_batchnorm,
+            'cnn_dropout_rate': 0.0,
+            'num_classes': num_classes,
+        }
 
-    return {
-        'n_layers': n_hidden_layers,
-        'layer_sizes': hidden_layer_sizes,
-        'activation': 'relu',
-        'dropout_rate': dropout_rate,
-        'conv_channels': conv_channels,
-        'kernel_size': kernel_size,
-        'pool_type': 'max',
-        'use_batchnorm': has_batchnorm,
-        'cnn_dropout_rate': cnn_dropout_rate,
-        'num_classes': num_classes,
-    }
+    if len(conv_channels) == 3:
+        n_layers = max(0, n_linear_layers - 1)
+        layer_sizes = [int(shape[0]) for _, shape in linear_entries[:-1]]
+
+        # Dropoutwerte sind nicht direkt im state_dict enthalten;
+        # die Schrittweite der Layer-Indizes liefert eine robuste Annäherung.
+        cnn_dropout_rate = 0.0
+        if len(conv_indices) >= 2:
+            observed_step = conv_indices[1] - conv_indices[0]
+            expected_step_without_dropout = 4 if has_batchnorm else 3
+            if observed_step > expected_step_without_dropout:
+                cnn_dropout_rate = 0.1
+
+        dropout_rate = 0.0
+        if n_layers >= 1 and len(linear_indices) >= 2:
+            observed_step = linear_indices[1] - linear_indices[0]
+            if observed_step > 2:
+                dropout_rate = 0.1
+
+        return {
+            'model_variant': 'legacy',
+            'n_layers': n_layers,
+            'layer_sizes': layer_sizes,
+            'activation': 'relu',
+            'dropout_rate': dropout_rate,
+            'conv_channels': conv_channels,
+            'kernel_size': kernel_size,
+            'pool_type': 'max',
+            'use_batchnorm': has_batchnorm,
+            'cnn_dropout_rate': cnn_dropout_rate,
+            'num_classes': num_classes,
+        }
+
+    raise ValueError(
+        'Unsupported SimpleCNN variant inferred from checkpoint: '
+        f'found {len(conv_channels)} convolutional blocks, expected 3 or 5.'
+    )
 
 
 def resolve_simplecnn_init_hparams(
@@ -528,11 +747,65 @@ def resolve_simplecnn_init_hparams(
     hints: dict[str, Any],
     overrides: dict[str, Any],
 ) -> dict[str, Any]:
-    """Kombiniert inferierte Werte, Checkpoint-Hints und explizite Overrides."""
+    """Kombiniert inferierte Werte, Checkpoint-Hints und Overrides (aktuell + Legacy)."""
     merged = dict(inferred)
     merged.update(hints)
     merged.update(overrides)
 
+    model_variant = str(merged.get('model_variant', inferred.get('model_variant', 'current'))).lower()
+    if model_variant not in {'current', 'legacy'}:
+        warnings.warn(f'Unsupported model_variant "{model_variant}"; fallback to inferred value.')
+        model_variant = str(inferred.get('model_variant', 'current')).lower()
+
+    pool_type = str(merged.get('pool_type', inferred.get('pool_type', 'max'))).lower()
+    if pool_type not in {'max', 'avg'}:
+        warnings.warn(f'Unsupported pool_type "{pool_type}" in hints; fallback to max.')
+        pool_type = 'max'
+
+    if model_variant == 'current':
+        if all(
+            k in merged
+            for k in ('conv_channels_1', 'conv_channels_2', 'conv_channels_3', 'conv_channels_4', 'conv_channels_5')
+        ):
+            conv_channels = (
+                int(merged['conv_channels_1']),
+                int(merged['conv_channels_2']),
+                int(merged['conv_channels_3']),
+                int(merged['conv_channels_4']),
+                int(merged['conv_channels_5']),
+            )
+        else:
+            raw_conv_channels = merged.get('conv_channels', inferred.get('conv_channels'))
+            if not isinstance(raw_conv_channels, (list, tuple)) or len(raw_conv_channels) != 5:
+                raise ValueError(f'Invalid conv_channels for current model: {raw_conv_channels}')
+            conv_channels = tuple(int(v) for v in raw_conv_channels)
+
+        activation = str(merged.get('activation', inferred.get('activation', 'relu'))).lower()
+        if activation not in {'relu', 'elu', 'swish'}:
+            warnings.warn(f'Unsupported activation "{activation}" in hints; fallback to relu.')
+            activation = 'relu'
+
+        return {
+            'model_variant': 'current',
+            'n_fc_layers': int(merged.get('n_fc_layers', inferred.get('n_fc_layers', 3))),
+            'fc_hidden_size': int(merged.get('fc_hidden_size', inferred.get('fc_hidden_size', 128))),
+            'activation': activation,
+            'dropout_rate': safe_float(merged.get('dropout_rate', inferred.get('dropout_rate', 0.0)), 0.0),
+            'num_classes': int(inferred['num_classes']),
+            'conv_channels': conv_channels,
+            'kernel_size': int(merged.get('kernel_size', inferred.get('kernel_size', 3))),
+            'pool_type': pool_type,
+            'use_batchnorm': safe_bool(
+                merged.get('use_batchnorm', inferred.get('use_batchnorm', False)),
+                bool(inferred.get('use_batchnorm', False)),
+            ),
+            'cnn_dropout_rate': safe_float(
+                merged.get('cnn_dropout_rate', inferred.get('cnn_dropout_rate', 0.0)),
+                0.0,
+            ),
+        }
+
+    # Legacy (3-Conv) fallback.
     if all(k in merged for k in ('conv_channels_1', 'conv_channels_2', 'conv_channels_3')):
         conv_channels = (
             int(merged['conv_channels_1']),
@@ -540,54 +813,54 @@ def resolve_simplecnn_init_hparams(
             int(merged['conv_channels_3']),
         )
     else:
-        raw_conv_channels = merged.get('conv_channels', inferred['conv_channels'])
+        raw_conv_channels = merged.get('conv_channels', inferred.get('conv_channels'))
         if not isinstance(raw_conv_channels, (list, tuple)) or len(raw_conv_channels) != 3:
-            raise ValueError(f'Invalid conv_channels: {raw_conv_channels}')
+            raise ValueError(f'Invalid conv_channels for legacy model: {raw_conv_channels}')
         conv_channels = tuple(int(v) for v in raw_conv_channels)
 
-    n_layers = int(merged.get('n_layers', inferred['n_layers']))
-    hidden_sizes: list[int] = []
-
+    n_layers = int(merged.get('n_layers', inferred.get('n_layers', 1)))
+    layer_sizes: list[int] = []
     if isinstance(merged.get('layer_sizes'), (list, tuple)):
-        hidden_sizes = [int(v) for v in merged['layer_sizes']]
+        layer_sizes = [int(v) for v in merged['layer_sizes']]
 
-    if not hidden_sizes:
+    if not layer_sizes:
         nodes_from_optuna = []
         for i in range(max(0, n_layers)):
             key = f'n_nodes_layer_{i}'
             if key in merged:
                 nodes_from_optuna.append(int(merged[key]))
-        hidden_sizes = nodes_from_optuna
+        layer_sizes = nodes_from_optuna
 
-    if len(hidden_sizes) != n_layers:
-        hidden_sizes = [int(v) for v in inferred['layer_sizes']]
-        n_layers = len(hidden_sizes)
+    if len(layer_sizes) != n_layers:
+        inferred_layer_sizes = inferred.get('layer_sizes', [])
+        if inferred_layer_sizes is None:
+            inferred_layer_sizes = []
+        elif not isinstance(inferred_layer_sizes, list):
+            inferred_layer_sizes = list(inferred_layer_sizes)
+        layer_sizes = [int(v) for v in inferred_layer_sizes]
+        n_layers = len(layer_sizes)
 
-    activation = str(merged.get('activation', inferred['activation'])).lower()
+    activation = str(merged.get('activation', inferred.get('activation', 'relu'))).lower()
     if activation not in {'relu', 'tanh', 'sigmoid'}:
-        warnings.warn(f'Unsupported activation "{activation}" in hints; fallback to relu.')
+        warnings.warn(f'Unsupported legacy activation "{activation}" in hints; fallback to relu.')
         activation = 'relu'
 
-    pool_type = str(merged.get('pool_type', inferred['pool_type'])).lower()
-    if pool_type not in {'max', 'avg'}:
-        warnings.warn(f'Unsupported pool_type "{pool_type}" in hints; fallback to max.')
-        pool_type = 'max'
-
     return {
+        'model_variant': 'legacy',
         'n_layers': n_layers,
-        'layer_sizes': hidden_sizes,
+        'layer_sizes': layer_sizes,
         'activation': activation,
-        'dropout_rate': safe_float(merged.get('dropout_rate', inferred['dropout_rate']), 0.0),
+        'dropout_rate': safe_float(merged.get('dropout_rate', inferred.get('dropout_rate', 0.0)), 0.0),
         'num_classes': int(inferred['num_classes']),
         'conv_channels': conv_channels,
-        'kernel_size': int(merged.get('kernel_size', inferred['kernel_size'])),
+        'kernel_size': int(merged.get('kernel_size', inferred.get('kernel_size', 3))),
         'pool_type': pool_type,
         'use_batchnorm': safe_bool(
-            merged.get('use_batchnorm', inferred['use_batchnorm']),
-            bool(inferred['use_batchnorm']),
+            merged.get('use_batchnorm', inferred.get('use_batchnorm', False)),
+            bool(inferred.get('use_batchnorm', False)),
         ),
         'cnn_dropout_rate': safe_float(
-            merged.get('cnn_dropout_rate', inferred['cnn_dropout_rate']),
+            merged.get('cnn_dropout_rate', inferred.get('cnn_dropout_rate', 0.0)),
             0.0,
         ),
     }
@@ -600,9 +873,22 @@ def resolve_pretrained_cnn_source(explicit_source: Path | None) -> Path:
             return explicit_source
         raise FileNotFoundError(f'Configured PRETRAINED_CNN_SOURCE does not exist: {explicit_source}')
 
-    direct_ckpt = MODEL_DIR / 'Simple_CNN.pt'
-    if direct_ckpt.exists():
-        return direct_ckpt
+    preferred_candidates = [
+        MODEL_DIR / 'Simple_CNN_2.pt',
+        MODEL_DIR / 'Simple_CNN.pt',
+        MODEL_DIR / 'CNN_score-0.9924_20260426_081737' / 'model_state_dict.pt',
+        MODEL_DIR / 'CNN_score-0.9924_20260426_081737',
+    ]
+    for candidate in preferred_candidates:
+        if candidate.is_file():
+            return candidate
+        if candidate.is_dir() and (candidate / 'model_state_dict.pt').exists():
+            return candidate
+
+    artifact_dirs = sorted(MODEL_DIR.glob('CNN_score-*'))
+    for artifact_dir in reversed(artifact_dirs):
+        if (artifact_dir / 'model_state_dict.pt').exists():
+            return artifact_dir
 
     artifact_dirs = sorted(MODEL_DIR.glob('Simple_CNN_score-*'))
     for artifact_dir in reversed(artifact_dirs):
@@ -611,7 +897,8 @@ def resolve_pretrained_cnn_source(explicit_source: Path | None) -> Path:
 
     raise FileNotFoundError(
         'No pretrained SimpleCNN source found. '
-        'Set PRETRAINED_CNN_SOURCE to a checkpoint file or artifact directory.'
+        'Set PRETRAINED_CNN_SOURCE to a checkpoint file or artifact directory '
+        '(e.g. trained_models/Simple_CNN_2.pt).'
     )
 
 
@@ -630,6 +917,9 @@ def load_pretrained_simplecnn(source: Path | None = None) -> LoadedSimpleCNN:
 
     if not state_dict_path.exists():
         raise FileNotFoundError(f'State dict file not found: {state_dict_path}')
+    if not metadata_path.exists() and PRETRAINED_CNN_METADATA_PATH is not None:
+        if PRETRAINED_CNN_METADATA_PATH.exists():
+            metadata_path = PRETRAINED_CNN_METADATA_PATH
 
     raw_checkpoint = torch.load(state_dict_path, map_location='cpu')
     state_dict, payload = extract_state_dict_and_payload(raw_checkpoint)
@@ -653,18 +943,32 @@ def load_pretrained_simplecnn(source: Path | None = None) -> LoadedSimpleCNN:
         overrides=CNN_HPARAMS_OVERRIDE,
     )
 
-    model = SimpleCNN(
-        n_layers=resolved_hparams['n_layers'],
-        layer_sizes=resolved_hparams['layer_sizes'],
-        activation=resolved_hparams['activation'],
-        dropout_rate=resolved_hparams['dropout_rate'],
-        num_classes=resolved_hparams['num_classes'],
-        conv_channels=resolved_hparams['conv_channels'],
-        kernel_size=resolved_hparams['kernel_size'],
-        pool_type=resolved_hparams['pool_type'],
-        use_batchnorm=resolved_hparams['use_batchnorm'],
-        cnn_dropout_rate=resolved_hparams['cnn_dropout_rate'],
-    )
+    if resolved_hparams['model_variant'] == 'current':
+        model = SimpleCNN(
+            n_fc_layers=resolved_hparams['n_fc_layers'],
+            fc_hidden_size=resolved_hparams['fc_hidden_size'],
+            activation=resolved_hparams['activation'],
+            dropout_rate=resolved_hparams['dropout_rate'],
+            num_classes=resolved_hparams['num_classes'],
+            conv_channels=resolved_hparams['conv_channels'],
+            kernel_size=resolved_hparams['kernel_size'],
+            pool_type=resolved_hparams['pool_type'],
+            use_batchnorm=resolved_hparams['use_batchnorm'],
+            cnn_dropout_rate=resolved_hparams['cnn_dropout_rate'],
+        )
+    else:
+        model = LegacySimpleCNN(
+            n_layers=resolved_hparams['n_layers'],
+            layer_sizes=resolved_hparams['layer_sizes'],
+            activation=resolved_hparams['activation'],
+            dropout_rate=resolved_hparams['dropout_rate'],
+            num_classes=resolved_hparams['num_classes'],
+            conv_channels=resolved_hparams['conv_channels'],
+            kernel_size=resolved_hparams['kernel_size'],
+            pool_type=resolved_hparams['pool_type'],
+            use_batchnorm=resolved_hparams['use_batchnorm'],
+            cnn_dropout_rate=resolved_hparams['cnn_dropout_rate'],
+        )
 
     try:
         model.load_state_dict(state_dict, strict=True)
@@ -682,7 +986,7 @@ def load_pretrained_simplecnn(source: Path | None = None) -> LoadedSimpleCNN:
     )
 
 
-def extract_feature_extractor(cnn_model: SimpleCNN) -> nn.Sequential:
+def extract_feature_extractor(cnn_model: nn.Module) -> nn.Sequential:
     """Extrahiert alle CNN-Feature-Layer bis vor AdaptiveAvgPool/Flatten."""
     modules = list(cnn_model.features.children())
     while modules and isinstance(modules[-1], (nn.Flatten, nn.AdaptiveAvgPool2d)):
@@ -1080,6 +1384,18 @@ def main() -> None:
     test_f1_macro = f1_score(y_true, y_pred, average='macro', zero_division=0)
 
     cm = confusion_matrix(y_true, y_pred, labels=list(range(len(class_labels))))
+    train_dataset = loaders['train'].dataset
+    train_original_class_counts: dict[str, int] | None = None
+    train_effective_class_counts: dict[str, int] | None = None
+    if isinstance(train_dataset, ClassAwareAugmentedDataset):
+        train_original_class_counts = {
+            train_dataset.classes[i]: int(train_dataset.original_class_counts.get(i, 0))
+            for i in range(len(train_dataset.classes))
+        }
+        train_effective_class_counts = {
+            train_dataset.classes[i]: int(train_dataset.effective_class_counts.get(i, 0))
+            for i in range(len(train_dataset.classes))
+        }
 
     final_results = {
         'test_loss': float(test_metrics['loss']),
@@ -1101,6 +1417,8 @@ def main() -> None:
         'cnn_hparams': cnn_info['resolved_hparams'],
         'feature_channels': int(cnn_info['feature_channels']),
         'feature_grid_size': list(cnn_info['feature_grid_size']),
+        'train_original_class_counts': train_original_class_counts,
+        'train_effective_class_counts': train_effective_class_counts,
     }
 
     run_params = {
@@ -1123,6 +1441,14 @@ def main() -> None:
         'vit_dropout': VIT_DROPOUT,
         'class_repeat_factors': CLASS_REPEAT_FACTORS,
         'class_augmentation_config': CLASS_AUGMENTATION_CONFIG,
+        'pretrained_cnn_source_override': (
+            str(PRETRAINED_CNN_SOURCE) if PRETRAINED_CNN_SOURCE is not None else None
+        ),
+        'pretrained_cnn_metadata_path': (
+            str(PRETRAINED_CNN_METADATA_PATH)
+            if PRETRAINED_CNN_METADATA_PATH is not None
+            else None
+        ),
         'cnn_source': cnn_info['source'],
         'cnn_hparams': cnn_info['resolved_hparams'],
     }
