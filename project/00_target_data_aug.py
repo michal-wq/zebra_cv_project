@@ -10,26 +10,27 @@ def transform_image(img, transformation):
 
 def main():
     """Lädt Bilder aus einem Ordner, augmentiert sie mehrfach und speichert die Ergebnisse."""
-    folder = '../swissimage_annotator/static/data/st gallen/y/'
-    output = 'aug_data_try'
-    aug_per_img = 24
+    folder = 'data/train/n'
+    output = 'data/augmented_train_data/n'
+    aug_per_img = 1
 
     transforms = v2.Compose([
-        v2.RandomResizedCrop(size=(224, 224), antialias=True),
+        #v2.RandomResizedCrop(size=(224, 224), antialias=True),
         v2.RandomHorizontalFlip(p=0.5),
-        v2.RandomRotation(6),
+        v2.RandomRotation(45),
         v2.RandomPerspective(distortion_scale=0.6, p=1.0),
         v2.GaussianBlur(kernel_size=(5, 9), sigma=(0.1, 5)),
         v2.ToDtype(torch.float32, scale=True),
     ])
+    counter = 0
     for img_path, img in iter_images(folder):
         for i in range(aug_per_img):
             out = transform_image(img, transforms)
             # Eindeutiger Dateiname pro Augmentierung.
             aug_path = img_path.with_stem(f'{img_path.stem}_{i}')
             save_image(aug_path, out, output)
-            print(f'Saved {aug_path.name}')
-        break
+            counter += 1
+    print(f'saved {counter}images | from {folder} to {output}')
 
 
 main()

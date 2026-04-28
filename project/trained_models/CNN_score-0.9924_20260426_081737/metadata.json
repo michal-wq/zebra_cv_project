@@ -1,0 +1,19 @@
+{
+  "model_name": "CNN",
+  "score": 0.99235807860262,
+  "params": {
+    "n_fc_layers": 7,
+    "fc_hidden_size": 128,
+    "activation": "elu",
+    "optimizer": "adamw",
+    "lr_schedule": "performance",
+    "learning_rate": 0.0005982225535986651,
+    "dropout_rate": 0.2,
+    "regularizer": "l2",
+    "kernel_size": 3,
+    "pool_type": "max",
+    "use_batchnorm": false,
+    "cnn_dropout_rate": 0.2
+  },
+  "created_at": "2026-04-26T08:17:37.534994"
+}
