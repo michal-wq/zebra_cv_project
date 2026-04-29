@@ -4,6 +4,10 @@ swissimage_annotator/
 raw_data/
 project/data/
 project/aug_data_try/
+project/data_master/
+project/split_build_logs/
+project/review_candidates/
+project/label_correction_logs/
 
 # Trainingsartefakte
 project/model_data/

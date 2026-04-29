@@ -40,7 +40,7 @@ LEARNING_RATE = 6e-4
 WEIGHT_DECAY = 1e-4
 USE_AMP = True
 GRAD_CLIP_NORM = 1.0
-EARLY_STOPPING_PATIENCE = 12
+EARLY_STOPPING_PATIENCE = 20
 
 ENFORCE_BINARY_CLASSIFICATION = True
 EXPECTED_NUM_CLASSES = 2
@@ -50,11 +50,11 @@ TRAIN_DIR = DATA_ROOT / 'train'
 VAL_DIR = DATA_ROOT / 'val'
 TEST_DIR = DATA_ROOT / 'test'
 
-MODEL_NAME = 'CNN9924_ViT_Hybrid_Seq'
+MODEL_NAME = 'CNN_ViT_Seq_2'
 MODEL_DIR = Path('trained_models')
 MODEL_DIR.mkdir(parents=True, exist_ok=True)
-CHECKPOINT_PATH = MODEL_DIR / 'cnn_vit_seq_cnn9924_checkpoint.pt'
-BEST_MODEL_PATH = MODEL_DIR / 'cnn_vit_seq_cnn9924_best.pt'
+CHECKPOINT_PATH = MODEL_DIR / 'cnn_vit_seq_2_checkpoint.pt'
+BEST_MODEL_PATH = MODEL_DIR / 'cnn_vit_seq_2_best.pt'
 
 # Optional explizit setzen. Mögliche Werte:
 # 1) Datei mit {'model_state_dict': ...} oder direktem state_dict

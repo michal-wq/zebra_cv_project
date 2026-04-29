@@ -47,7 +47,7 @@ COPY_MODE = 'copy'
 # Safety guard:
 # - if True, existing output split dirs are deleted and recreated.
 # - if False, script fails when output split dirs already exist.
-OVERWRITE_OUTPUT_SPLITS = False
+OVERWRITE_OUTPUT_SPLITS = True
 
 ALLOWED_IMAGE_EXTS = {'.jpg', '.jpeg', '.png', '.bmp', '.webp', '.tif', '.tiff'}
 
