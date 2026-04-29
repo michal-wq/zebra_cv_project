@@ -295,7 +295,7 @@ def main() -> None:
             'Use matching checkpoint and dataset.'
         )
 
-    hybrid_cfg = analysis08.resolve_hybrid_config(cnn_vit07, metadata)
+    hybrid_cfg = analysis08.resolve_hybrid_config(cnn_vit07, metadata, checkpoint_payload=payload)
     model, model_info = analysis08.build_model_for_inference(
         cnn_module=cnn_vit07,
         num_classes=len(class_to_idx_ref),

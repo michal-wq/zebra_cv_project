@@ -225,11 +225,17 @@ def resolve_cnn_state_dict_from_metadata(metadata_path: Path | None) -> Path | N
     return None
 
 
-def resolve_hybrid_config(cnn_module: Any, metadata: dict[str, Any]) -> dict[str, Any]:
+def resolve_hybrid_config(
+    cnn_module: Any,
+    metadata: dict[str, Any],
+    checkpoint_payload: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Builds robust hybrid-model config from metadata with safe defaults."""
     params = metadata.get('params', {}) if isinstance(metadata, dict) else {}
     if not isinstance(params, dict):
         params = {}
+    payload = checkpoint_payload if isinstance(checkpoint_payload, dict) else {}
+    payload_cnn_info = payload.get('cnn_info', {}) if isinstance(payload.get('cnn_info'), dict) else {}
 
     source_dir_for_relative_paths = metadata.get('_source_dir', PROJECT_DIR)
     if not isinstance(source_dir_for_relative_paths, Path):
@@ -248,6 +254,19 @@ def resolve_hybrid_config(cnn_module: Any, metadata: dict[str, Any]) -> dict[str
         params.get('cnn_source'),
         base_dir=source_dir_for_relative_paths,
     )
+    pretrained_source_from_payload_state = resolve_reference_path(
+        payload_cnn_info.get('state_dict_path'),
+        base_dir=PROJECT_DIR,
+    )
+    pretrained_source_from_payload_source = resolve_reference_path(
+        payload_cnn_info.get('source'),
+        base_dir=PROJECT_DIR,
+    )
+
+    resolved_cnn_hparams = params.get('cnn_hparams')
+    if not isinstance(resolved_cnn_hparams, dict):
+        payload_resolved = payload_cnn_info.get('resolved_hparams')
+        resolved_cnn_hparams = payload_resolved if isinstance(payload_resolved, dict) else None
 
     # Prefer explicit override first. Otherwise anchor to the artifact metadata
     # (immutable path) to avoid loading a mutable alias like Simple_CNN.pt.
@@ -257,6 +276,17 @@ def resolve_hybrid_config(cnn_module: Any, metadata: dict[str, Any]) -> dict[str
     elif pretrained_source_from_metadata is not None:
         pretrained_source = pretrained_source_from_metadata
         source_resolution = 'pretrained_cnn_metadata_path:model_state_dict.pt'
+    elif isinstance(resolved_cnn_hparams, dict):
+        # Best-checkpoint payloads can carry resolved_hparams but no artifact metadata.
+        # In that case, rebuild backbone from hparams and load hybrid weights directly.
+        pretrained_source = None
+        source_resolution = 'checkpoint_payload:resolved_hparams_only'
+    elif pretrained_source_from_payload_state is not None:
+        pretrained_source = pretrained_source_from_payload_state
+        source_resolution = 'checkpoint_payload:cnn_info.state_dict_path'
+    elif pretrained_source_from_payload_source is not None:
+        pretrained_source = pretrained_source_from_payload_source
+        source_resolution = 'checkpoint_payload:cnn_info.source'
     else:
         pretrained_source = pretrained_source_from_training
         source_resolution = 'cnn_source_fallback'
@@ -271,8 +301,43 @@ def resolve_hybrid_config(cnn_module: Any, metadata: dict[str, Any]) -> dict[str
         'unfreeze_last_conv_blocks': int(params.get('unfreeze_last_conv_blocks', 0)),
         'pretrained_cnn_source': pretrained_source,
         'pretrained_cnn_metadata_path': pretrained_metadata,
+        'resolved_cnn_hparams': resolved_cnn_hparams,
         'pretrained_cnn_source_resolution': source_resolution,
     }
+
+
+def build_simplecnn_from_resolved_hparams(cnn_module: Any, resolved_hparams: dict[str, Any]) -> nn.Module:
+    """Builds a SimpleCNN or LegacySimpleCNN directly from resolved hparams."""
+    model_variant = str(resolved_hparams.get('model_variant', 'current')).lower()
+
+    if model_variant == 'legacy':
+        if not hasattr(cnn_module, 'LegacySimpleCNN'):
+            raise AttributeError('07_cnn_vit_seq.py has no LegacySimpleCNN class for legacy checkpoint fallback.')
+        return cnn_module.LegacySimpleCNN(
+            n_layers=int(resolved_hparams.get('n_layers', 1)),
+            layer_sizes=list(resolved_hparams.get('layer_sizes', [128])),
+            activation=str(resolved_hparams.get('activation', 'relu')),
+            dropout_rate=float(resolved_hparams.get('dropout_rate', 0.0)),
+            num_classes=int(resolved_hparams.get('num_classes', 10)),
+            conv_channels=tuple(resolved_hparams.get('conv_channels', (32, 64, 128))),
+            kernel_size=int(resolved_hparams.get('kernel_size', 3)),
+            pool_type=str(resolved_hparams.get('pool_type', 'max')),
+            use_batchnorm=bool(resolved_hparams.get('use_batchnorm', False)),
+            cnn_dropout_rate=float(resolved_hparams.get('cnn_dropout_rate', 0.0)),
+        )
+
+    return cnn_module.SimpleCNN(
+        n_fc_layers=int(resolved_hparams.get('n_fc_layers', 3)),
+        fc_hidden_size=int(resolved_hparams.get('fc_hidden_size', 128)),
+        activation=str(resolved_hparams.get('activation', 'relu')),
+        dropout_rate=float(resolved_hparams.get('dropout_rate', 0.0)),
+        num_classes=int(resolved_hparams.get('num_classes', 10)),
+        conv_channels=tuple(resolved_hparams.get('conv_channels', (32, 64, 128, 256, 256))),
+        kernel_size=int(resolved_hparams.get('kernel_size', 3)),
+        pool_type=str(resolved_hparams.get('pool_type', 'max')),
+        use_batchnorm=bool(resolved_hparams.get('use_batchnorm', False)),
+        cnn_dropout_rate=float(resolved_hparams.get('cnn_dropout_rate', 0.0)),
+    )
 
 
 def build_model_for_inference(
@@ -284,13 +349,34 @@ def build_model_for_inference(
     """Reconstructs the exact CNN->ViT hybrid architecture for loading weights."""
     pretrained_source = hybrid_cfg.get('pretrained_cnn_source')
     pretrained_metadata_path = hybrid_cfg.get('pretrained_cnn_metadata_path')
+    resolved_cnn_hparams = hybrid_cfg.get('resolved_cnn_hparams')
 
-    if pretrained_metadata_path is not None:
-        # load_pretrained_simplecnn uses this fallback when metadata near checkpoint is absent.
-        cnn_module.PRETRAINED_CNN_METADATA_PATH = pretrained_metadata_path
+    loaded_cnn = None
+    if pretrained_source is not None:
+        if pretrained_metadata_path is not None:
+            # load_pretrained_simplecnn uses this fallback when metadata near checkpoint is absent.
+            cnn_module.PRETRAINED_CNN_METADATA_PATH = pretrained_metadata_path
+        loaded_cnn = cnn_module.load_pretrained_simplecnn(source=pretrained_source)
+        backbone_model = loaded_cnn.model
+        source_path_for_info = str(loaded_cnn.source_path)
+        state_path_for_info = str(loaded_cnn.state_dict_path)
+        resolved_cnn_hparams_for_info = loaded_cnn.resolved_hparams
+    elif isinstance(resolved_cnn_hparams, dict):
+        # Fallback when external source paths are unavailable (e.g. old best checkpoints
+        # without metadata). The hybrid checkpoint still contains backbone weights.
+        backbone_model = build_simplecnn_from_resolved_hparams(cnn_module, resolved_cnn_hparams)
+        source_path_for_info = None
+        state_path_for_info = None
+        resolved_cnn_hparams_for_info = resolved_cnn_hparams
+    else:
+        # Last resort to keep previous behavior.
+        loaded_cnn = cnn_module.load_pretrained_simplecnn(source=None)
+        backbone_model = loaded_cnn.model
+        source_path_for_info = str(loaded_cnn.source_path)
+        state_path_for_info = str(loaded_cnn.state_dict_path)
+        resolved_cnn_hparams_for_info = loaded_cnn.resolved_hparams
 
-    loaded_cnn = cnn_module.load_pretrained_simplecnn(source=pretrained_source)
-    feature_extractor = cnn_module.extract_feature_extractor(loaded_cnn.model)
+    feature_extractor = cnn_module.extract_feature_extractor(backbone_model)
 
     if hybrid_cfg['freeze_backbone']:
         cnn_module.freeze_module(feature_extractor)
@@ -315,11 +401,11 @@ def build_model_for_inference(
     ).to(device)
 
     model_info = {
-        'cnn_source': str(loaded_cnn.source_path),
-        'state_dict_path': str(loaded_cnn.state_dict_path),
+        'cnn_source': source_path_for_info,
+        'state_dict_path': state_path_for_info,
         'feature_channels': int(feature_channels),
         'feature_grid_size': [int(feature_grid_size[0]), int(feature_grid_size[1])],
-        'resolved_cnn_hparams': loaded_cnn.resolved_hparams,
+        'resolved_cnn_hparams': resolved_cnn_hparams_for_info,
         'resolved_hybrid_params': hybrid_cfg,
     }
     return model, model_info
@@ -546,7 +632,7 @@ def main() -> None:
     idx_to_class = {idx: cls_name for cls_name, idx in class_to_idx.items()}
     num_classes = len(class_to_idx)
 
-    hybrid_cfg = resolve_hybrid_config(cnn_vit_module, metadata)
+    hybrid_cfg = resolve_hybrid_config(cnn_vit_module, metadata, checkpoint_payload=payload)
     model, model_info = build_model_for_inference(
         cnn_module=cnn_vit_module,
         num_classes=num_classes,
