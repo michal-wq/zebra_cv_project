@@ -36,7 +36,7 @@ IMAGE_SIZE = 224
 BATCH_SIZE = 256
 NUM_WORKERS = 16
 NUM_EPOCHS = 60
-LEARNING_RATE = 6e-4
+LEARNING_RATE = 1e-4
 WEIGHT_DECAY = 1e-4
 USE_AMP = True
 GRAD_CLIP_NORM = 1.0
@@ -83,7 +83,7 @@ VIT_DROPOUT = 0.1
 # Klassen-Ungleichgewicht und On-the-fly-Augs analog zur Optuna-CNN-Pipeline,
 # aus der CNN_score-0.9924_20260426_081737 stammt.
 CLASS_REPEAT_FACTORS: dict[str, int] = {
-    'y': 35,
+    'y': 20,
     'n': 4,
 }
 
