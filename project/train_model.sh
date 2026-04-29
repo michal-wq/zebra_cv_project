@@ -7,6 +7,6 @@
 #SBATCH --partition=students	 ## Partitionsname. Die zur Verfügung stehenden Partitionen können mit dem Befehl sinfo angezeigt werden
 #SBATCH --mem=48G               ## Der Arbeitsspeicher, welcher für den Job reserviert wird
 #SBATCH --cpus-per-task=18     ## Die Anzahl virtueller Cores, die für den Job reserviert werden
-#SBATCH --gres=gpu:a100:2
+#SBATCH --gres=gpu:a100:1
 
 uv run 07_cnn_vit_seq.py
