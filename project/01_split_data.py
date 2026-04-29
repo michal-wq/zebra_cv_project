@@ -109,7 +109,7 @@ def main():
     print(f'Test size: {test_size}')
     print('=' * n)
 
-    cities = ['luzern', 'st gallen']
+    cities = ['winterthur']
     for city in cities:
         split_dataset_by_class(
             source_root=f'../raw_data/data/{city}',
