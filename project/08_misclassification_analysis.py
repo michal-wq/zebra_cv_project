@@ -212,6 +212,19 @@ def resolve_reference_path(value: Any, base_dir: Path) -> Path | None:
     return candidate_1
 
 
+def resolve_cnn_state_dict_from_metadata(metadata_path: Path | None) -> Path | None:
+    """Returns sibling model_state_dict.pt for a metadata path when available."""
+    if metadata_path is None:
+        return None
+    if not metadata_path.exists():
+        return None
+
+    candidate = metadata_path.parent / 'model_state_dict.pt'
+    if candidate.exists():
+        return candidate
+    return None
+
+
 def resolve_hybrid_config(cnn_module: Any, metadata: dict[str, Any]) -> dict[str, Any]:
     """Builds robust hybrid-model config from metadata with safe defaults."""
     params = metadata.get('params', {}) if isinstance(metadata, dict) else {}
@@ -222,21 +235,31 @@ def resolve_hybrid_config(cnn_module: Any, metadata: dict[str, Any]) -> dict[str
     if not isinstance(source_dir_for_relative_paths, Path):
         source_dir_for_relative_paths = PROJECT_DIR
 
-    pretrained_source = resolve_reference_path(
-        params.get('pretrained_cnn_source_override'),
-        base_dir=source_dir_for_relative_paths,
-    )
-    if pretrained_source is None:
-        # Fallback to the source actually used during training (stored in metadata).
-        pretrained_source = resolve_reference_path(
-            params.get('cnn_source'),
-            base_dir=source_dir_for_relative_paths,
-        )
-
     pretrained_metadata = resolve_reference_path(
         params.get('pretrained_cnn_metadata_path'),
         base_dir=source_dir_for_relative_paths,
     )
+    pretrained_source_override = resolve_reference_path(
+        params.get('pretrained_cnn_source_override'),
+        base_dir=source_dir_for_relative_paths,
+    )
+    pretrained_source_from_metadata = resolve_cnn_state_dict_from_metadata(pretrained_metadata)
+    pretrained_source_from_training = resolve_reference_path(
+        params.get('cnn_source'),
+        base_dir=source_dir_for_relative_paths,
+    )
+
+    # Prefer explicit override first. Otherwise anchor to the artifact metadata
+    # (immutable path) to avoid loading a mutable alias like Simple_CNN.pt.
+    if pretrained_source_override is not None:
+        pretrained_source = pretrained_source_override
+        source_resolution = 'pretrained_cnn_source_override'
+    elif pretrained_source_from_metadata is not None:
+        pretrained_source = pretrained_source_from_metadata
+        source_resolution = 'pretrained_cnn_metadata_path:model_state_dict.pt'
+    else:
+        pretrained_source = pretrained_source_from_training
+        source_resolution = 'cnn_source_fallback'
 
     return {
         'vit_embed_dim': int(params.get('vit_embed_dim', getattr(cnn_module, 'VIT_EMBED_DIM', 256))),
@@ -248,6 +271,7 @@ def resolve_hybrid_config(cnn_module: Any, metadata: dict[str, Any]) -> dict[str
         'unfreeze_last_conv_blocks': int(params.get('unfreeze_last_conv_blocks', 0)),
         'pretrained_cnn_source': pretrained_source,
         'pretrained_cnn_metadata_path': pretrained_metadata,
+        'pretrained_cnn_source_resolution': source_resolution,
     }
 
 
@@ -534,7 +558,7 @@ def main() -> None:
         model.load_state_dict(state_dict, strict=True)
     except RuntimeError as exc:
         raise RuntimeError(
-            'Failed to load hybrid model weights. This usually means architecture mismatch '\
+            'Failed to load hybrid model weights. This usually means architecture mismatch '
             '(e.g., different ViT depth/embed/head settings). '
             f'Hybrid config used: {hybrid_cfg}'
         ) from exc

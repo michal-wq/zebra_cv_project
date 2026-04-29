@@ -34,7 +34,7 @@ CLASS_NAMES = ('y', 'n')
 MANIFEST_PATH: Path | None = None
 
 # Default is dry-run for safety. Set to False to execute moves.
-DRY_RUN = True
+DRY_RUN = False
 
 # If True, 'old_label' in CSV must match detected current label (if provided).
 STRICT_OLD_LABEL_MATCH = True
