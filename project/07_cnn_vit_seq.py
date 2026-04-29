@@ -1244,7 +1244,23 @@ def load_training_checkpoint_if_available(
         raise ValueError(f'Invalid checkpoint format in {CHECKPOINT_PATH}')
 
     state = strip_module_prefix(state)
-    unwrap_model(model).load_state_dict(state)
+    current_state = unwrap_model(model).state_dict()
+    missing_keys = [k for k in current_state.keys() if k not in state]
+    unexpected_keys = [k for k in state.keys() if k not in current_state]
+    shape_mismatches = [
+        k for k in current_state.keys() & state.keys()
+        if current_state[k].shape != state[k].shape
+    ]
+    if missing_keys or unexpected_keys or shape_mismatches:
+        warnings.warn(
+            'Checkpoint/model architecture mismatch detected. '
+            f'Skipping resume from {CHECKPOINT_PATH} and starting fresh. '
+            f'missing={len(missing_keys)}, unexpected={len(unexpected_keys)}, '
+            f'shape_mismatches={len(shape_mismatches)}'
+        )
+        return start_epoch, best_val_acc, history
+
+    unwrap_model(model).load_state_dict(state, strict=True)
 
     if 'optimizer_state_dict' in ckpt:
         optimizer.load_state_dict(ckpt['optimizer_state_dict'])
