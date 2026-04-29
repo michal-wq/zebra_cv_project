@@ -36,11 +36,11 @@ IMAGE_SIZE = 224
 BATCH_SIZE = 256
 NUM_WORKERS = 16
 NUM_EPOCHS = 60
-LEARNING_RATE = 6e-4
+LEARNING_RATE = 1e-4
 WEIGHT_DECAY = 1e-4
 USE_AMP = True
 GRAD_CLIP_NORM = 1.0
-EARLY_STOPPING_PATIENCE = 12
+EARLY_STOPPING_PATIENCE = 20
 
 ENFORCE_BINARY_CLASSIFICATION = True
 EXPECTED_NUM_CLASSES = 2
@@ -50,18 +50,18 @@ TRAIN_DIR = DATA_ROOT / 'train'
 VAL_DIR = DATA_ROOT / 'val'
 TEST_DIR = DATA_ROOT / 'test'
 
-MODEL_NAME = 'CNN9924_ViT_Hybrid_Seq'
+MODEL_NAME = 'CNN2_ViT_Seq_4'
 MODEL_DIR = Path('trained_models')
 MODEL_DIR.mkdir(parents=True, exist_ok=True)
-CHECKPOINT_PATH = MODEL_DIR / 'cnn_vit_seq_cnn9924_checkpoint.pt'
-BEST_MODEL_PATH = MODEL_DIR / 'cnn_vit_seq_cnn9924_best.pt'
+CHECKPOINT_PATH = MODEL_DIR / 'cnn2_vit_seq_4_checkpoint.pt'
+BEST_MODEL_PATH = MODEL_DIR / 'cnn2_vit_seq_4_best.pt'
 
 # Optional explizit setzen. Mögliche Werte:
 # 1) Datei mit {'model_state_dict': ...} oder direktem state_dict
 # 2) Artefakt-Ordner mit model_state_dict.pt + metadata.json
 PRETRAINED_CNN_SOURCE: Path | None = None
 PRETRAINED_CNN_METADATA_PATH: Path | None = (
-    MODEL_DIR / 'CNN_score-0.9924_20260426_081737' / 'metadata.json'
+    MODEL_DIR / 'CNN_2"_score-0.9909_20260429_001737' / 'metadata.json'
 )
 
 # Falls Metadata/Checkpoint unvollständig sind, können Architekturwerte hier
@@ -75,15 +75,15 @@ UNFREEZE_LAST_CONV_BLOCKS = 0
 
 # Transformer-Konfiguration
 VIT_EMBED_DIM = 256
-VIT_NUM_HEADS = 8
-VIT_DEPTH = 4
+VIT_NUM_HEADS = 16
+VIT_DEPTH = 3
 VIT_MLP_RATIO = 4.0
-VIT_DROPOUT = 0.1
+VIT_DROPOUT = 0.2
 
 # Klassen-Ungleichgewicht und On-the-fly-Augs analog zur Optuna-CNN-Pipeline,
 # aus der CNN_score-0.9924_20260426_081737 stammt.
 CLASS_REPEAT_FACTORS: dict[str, int] = {
-    'y': 35,
+    'y': 12,
     'n': 4,
 }
 

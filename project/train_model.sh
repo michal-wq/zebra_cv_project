@@ -9,4 +9,4 @@
 #SBATCH --cpus-per-task=18     ## Die Anzahl virtueller Cores, die für den Job reserviert werden
 #SBATCH --gres=gpu:a100:1
 
-uv run 03_optuna_training_pipeline.py
+uv run 07_cnn_vit_seq.py
