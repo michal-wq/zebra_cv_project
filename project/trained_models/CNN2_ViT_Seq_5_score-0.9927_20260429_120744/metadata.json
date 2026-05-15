@@ -1,0 +1,108 @@
+{
+  "model_name": "CNN2_ViT_Seq_5",
+  "score": 0.9927378358750908,
+  "params": {
+    "seed": 77,
+    "image_size": 224,
+    "batch_size": 256,
+    "num_workers": 16,
+    "num_epochs": 60,
+    "learning_rate": 1e-05,
+    "weight_decay": 0.0001,
+    "use_amp": true,
+    "grad_clip_norm": 1.0,
+    "early_stopping_patience": 20,
+    "freeze_backbone": true,
+    "unfreeze_last_conv_blocks": 0,
+    "vit_embed_dim": 256,
+    "vit_num_heads": 16,
+    "vit_depth": 3,
+    "vit_mlp_ratio": 4.0,
+    "vit_dropout": 0.2,
+    "class_repeat_factors": {
+      "y": 13,
+      "n": 4
+    },
+    "class_augmentation_config": {
+      "y": {
+        "apply_prob": 1.0,
+        "hflip_prob": 0.5,
+        "vflip_prob": 0.5,
+        "rotation_deg": 30,
+        "rotation_prob": 0.5,
+        "median_blur_limit": 7,
+        "median_blur_prob": 0.3,
+        "gaussian_noise_var_limit": 0.38,
+        "gaussian_noise_prob": 0.5,
+        "hue_shift_limit": 10,
+        "sat_shift_limit": 10,
+        "val_shift_limit": 10,
+        "hsv_prob": 0.3,
+        "brightness_limit": [
+          0.2,
+          0.2
+        ],
+        "contrast_limit": [
+          0.2,
+          0.2
+        ],
+        "brightness_contrast_prob": 0.3,
+        "cutout_max_height": 20,
+        "cutout_max_width": 20,
+        "cutout_num_holes": 5,
+        "cutout_prob": 0.5
+      },
+      "n": {
+        "apply_prob": 1.0,
+        "hflip_prob": 0.5,
+        "vflip_prob": 0.5,
+        "rotation_deg": 30,
+        "rotation_prob": 0.5,
+        "median_blur_limit": 7,
+        "median_blur_prob": 0.3,
+        "gaussian_noise_var_limit": 0.38,
+        "gaussian_noise_prob": 0.5,
+        "hue_shift_limit": 10,
+        "sat_shift_limit": 10,
+        "val_shift_limit": 10,
+        "hsv_prob": 0.3,
+        "brightness_limit": [
+          0.2,
+          0.2
+        ],
+        "contrast_limit": [
+          0.2,
+          0.2
+        ],
+        "brightness_contrast_prob": 0.3,
+        "cutout_max_height": 20,
+        "cutout_max_width": 20,
+        "cutout_num_holes": 5,
+        "cutout_prob": 0.5
+      }
+    },
+    "pretrained_cnn_source_override": null,
+    "pretrained_cnn_metadata_path": "trained_models/CNN_2\"_score-0.9909_20260429_001737/metadata.json",
+    "cnn_source": "trained_models/Simple_CNN_2.pt",
+    "cnn_hparams": {
+      "model_variant": "current",
+      "n_fc_layers": 7,
+      "fc_hidden_size": 160,
+      "activation": "swish",
+      "dropout_rate": 0.4,
+      "num_classes": 10,
+      "conv_channels": [
+        32,
+        64,
+        128,
+        256,
+        256
+      ],
+      "kernel_size": 3,
+      "pool_type": "max",
+      "use_batchnorm": true,
+      "cnn_dropout_rate": 0.0
+    }
+  },
+  "created_at": "2026-04-29T12:07:44.824297"
+}
