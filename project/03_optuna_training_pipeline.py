@@ -29,15 +29,15 @@ from training_functions import save_best_model_artifacts
 SEED = 77
 
 ARTIFACT_BASE_DIR = 'trained_models'
-MODEL_NAME = 'CNN_2"'
-BEST_MODEL_CHECKPOINT_PATH = 'trained_models/Simple_CNN_2.pt'
+MODEL_NAME = 'CNN_512"'
+BEST_MODEL_CHECKPOINT_PATH = 'trained_models/CNN_512.pt'
 
-N_TRIALS = 50
-OPTUNA_EPOCHS = 10
+N_TRIALS = 1
+OPTUNA_EPOCHS = 1
 OPTUNA_PATIENCE = 4
 OPTUNA_PRUNER_STARTUP_TRIALS = 5
 OPTUNA_PRUNER_WARMUP_STEPS = 5
-STUDY_NAME = 'CNN_zebra_model_optimization'
+STUDY_NAME = 'CNN_512'
 
 FINAL_TRAIN_EPOCHS = 100
 FINAL_PATIENCE = 10
@@ -49,7 +49,7 @@ BATCH_SIZE = 256
 FINAL_BATCH_SIZE_MIN = 16
 FINAL_BATCH_SIZE_MAX = 256
 FINAL_BATCH_SIZE_STEP = 16
-NUM_WORKERS = 16
+NUM_WORKERS = 10
 
 DATA_ROOT = Path('data')
 TRAIN_DIR = DATA_ROOT / 'train'
@@ -57,56 +57,70 @@ VAL_DIR = DATA_ROOT / 'val'
 TEST_DIR = DATA_ROOT / 'test'
 
 CLASS_REPEAT_FACTORS: dict[str, int] = {
-    'y': 36,
-    'n': 4,
+    'y': 26,
+    'n': 8,
 }
 
 CLASS_AUGMENTATION_CONFIG = {
-    'y': {
-        'apply_prob': 0.9,
-        'hflip_prob': 0.35,
-        'rotation_deg': 8,
-        'perspective_prob': 0.30,
-        'affine_prob': 0.30,
-        'affine_deg': 6,
-        'affine_translate': (0.08, 0.08),
-        'affine_scale': (0.9, 1.1),
-        'blur_prob': 0.20,
-        'color_jitter': (0.25, 0.25, 0.25, 0.08),
-        'grayscale_prob': 0.05,
-        'autocontrast_prob': 0.01,
-        'equalize_prob': 0.02,
-        'sharpness_prob': 0.02,
-        'sharpness_factor': 1.8,
-        'solarize_prob': 0.01,
-        'posterize_prob': 0.02,
-        'posterize_bits': 4,
-        'randaugment_prob': 0.10,
-        'randaugment_num_ops': 2,
-        'randaugment_magnitude': 6,
+    "y": {
+        "apply_prob": 1.0,
+
+        # Horizontal-Flip (p=0.5)
+        "hflip_prob": 0.5,
+
+        # Vertical-Flip (p=0.5)
+        "vflip_prob": 0.5,
+
+        # Rotation (limit=30, p=0.5)
+        "rotation_deg": 30,
+        "rotation_prob": 0.5,
+
+        # Median-Blur (limit=7, p=0.3)
+        "median_blur_limit": 7,
+        "median_blur_prob": 0.3,
+
+        # Gaussian-Noise (var_limit=0.38, p=0.5)
+        "gaussian_noise_var_limit": 0.38,
+        "gaussian_noise_prob": 0.5,
+
+        # Hue-Saturation-Value (h/s/v shift=10, p=0.3)
+        "hue_shift_limit": 10,
+        "sat_shift_limit": 10,
+        "val_shift_limit": 10,
+        "hsv_prob": 0.3,
+
+        # Random-Brightness-Contrast (0.2 / 0.2, p=0.3)
+        "brightness_limit": (0.2, 0.2),
+        "contrast_limit": (0.2, 0.2),
+        "brightness_contrast_prob": 0.3,
+
+        # Cutout (max_h=20, max_w=20, holes=5, p=0.5)
+        "cutout_max_height": 20,
+        "cutout_max_width": 20,
+        "cutout_num_holes": 5,
+        "cutout_prob": 0.5,
     },
-    'n': {
-        'apply_prob': 0.8,
-        'hflip_prob': 0.25,
-        'rotation_deg': 6,
-        'perspective_prob': 0.20,
-        'affine_prob': 0.20,
-        'affine_deg': 4,
-        'affine_translate': (0.05, 0.05),
-        'affine_scale': (0.95, 1.05),
-        'blur_prob': 0.20,
-        'color_jitter': (0.25, 0.25, 0.25, 0.08),
-        'grayscale_prob': 0.05,
-        'autocontrast_prob': 0.01,
-        'equalize_prob': 0.02,
-        'sharpness_prob': 0.02,
-        'sharpness_factor': 1.8,
-        'solarize_prob': 0.01,
-        'posterize_prob': 0.02,
-        'posterize_bits': 4,
-        'randaugment_prob': 0.10,
-        'randaugment_num_ops': 2,
-        'randaugment_magnitude': 6,
+    "n": {
+        "apply_prob": 1.0,
+        "hflip_prob": 0.5,
+        "vflip_prob": 0.5,
+        "rotation_deg": 30,
+        "rotation_prob": 0.5,
+        "median_blur_limit": 7,
+        "median_blur_prob": 0.3,
+        "gaussian_noise_var_limit": 0.38,
+        "gaussian_noise_prob": 0.5,
+        "hue_shift_limit": 10,
+        "sat_shift_limit": 10,
+        "val_shift_limit": 10,
+        "hsv_prob": 0.3,
+        "brightness_limit": (0.2, 0.2),
+        "contrast_limit": (0.2, 0.2),
+        "brightness_contrast_prob": 0.3,
+        "cutout_max_height": 20,
+        "cutout_max_width": 20,
+        "cutout_num_holes": 5,
+        "cutout_prob": 0.5,
     },
 }
 
@@ -513,25 +527,25 @@ print(f'Train Batches: {len(train_loader)}')
 
 def objective(trial: optuna.Trial) -> float:
     """Definiert einen Optuna-Trial und gibt den besten Validierungs-Loss zurück."""
-    n_fc_layers = trial.suggest_int("n_fc_layers", 6, 10)
-    fc_hidden_size = trial.suggest_int("fc_hidden_size", 128, 256, step=32)
+    n_fc_layers = trial.suggest_int("n_fc_layers", 7, 7)
+    fc_hidden_size = trial.suggest_int("fc_hidden_size", 128, 160, step=16)
 
     # Conv fix
-    conv_channels = (32, 64, 128, 256, 256)
+    conv_channels = (32, 64, 128, 256, 512)
 
-    activation = trial.suggest_categorical("activation", ["relu", "elu", "swish"])
-    optimizer_name = trial.suggest_categorical("optimizer", ["adamw", "nadam"])
+    activation = trial.suggest_categorical("activation", [ "elu", "swish"])
+    optimizer_name = trial.suggest_categorical("optimizer", ["adamw"])
     lr_schedule = trial.suggest_categorical("lr_schedule", ["onecycle", "performance"])
-    learning_rate = trial.suggest_float("learning_rate", 1e-4, 1e-2, log=True)
+    learning_rate = trial.suggest_float("learning_rate", 0.00014775052201922262, 0.0005982225535986651, log=True)
 
-    dropout_rate = trial.suggest_float('dropout_rate', 0.0, 0.5, step=0.1)
-    regularizer = trial.suggest_categorical('regularizer', [None, 'l1', 'l2', 'l1_l2'])
+    dropout_rate = trial.suggest_float('dropout_rate', 0.2, 0.4, step=0.1)
+    regularizer = trial.suggest_categorical('regularizer', [None,  'l2'])
 
     # CNN-spezifische Hyperparameter
-    kernel_size = trial.suggest_categorical('kernel_size', [3, 5])
-    pool_type = trial.suggest_categorical('pool_type', ['max', 'avg'])
+    kernel_size = trial.suggest_categorical('kernel_size', [3])
+    pool_type = trial.suggest_categorical('pool_type', ['max'])
     use_batchnorm = trial.suggest_categorical('use_batchnorm', [True, False])
-    cnn_dropout_rate = trial.suggest_float('cnn_dropout_rate', 0.0, 0.4, step=0.05)
+    cnn_dropout_rate = trial.suggest_float('cnn_dropout_rate', 0.0, 0.2, step=0.1)
 
     model = SimpleCNN(
         n_fc_layers=n_fc_layers,

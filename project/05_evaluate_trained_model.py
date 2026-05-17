@@ -21,9 +21,9 @@ NUM_WORKERS = 8
 DATA_ROOT = Path("data")
 TEST_DIR = DATA_ROOT / "test"
 
-MODEL_NAME = "ResNet18_Finetune_Eval"
+MODEL_NAME = "Big_Trans_3"
 MODEL_DIR = Path("trained_models")
-MODEL_PATH = MODEL_DIR / "resnet18_finetune_best.pt"
+MODEL_PATH = MODEL_DIR / "Big_Trans_3_Best.pt"
 
 
 def get_device() -> torch.device:

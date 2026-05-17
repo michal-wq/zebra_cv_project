@@ -33,14 +33,14 @@ from training_functions import save_best_model_artifacts
 # =========================
 SEED = 77
 IMAGE_SIZE = 224
-BATCH_SIZE = 256
+BATCH_SIZE = 32
 NUM_WORKERS = 16
-NUM_EPOCHS = 60
+NUM_EPOCHS = 1
 LEARNING_RATE = 1e-4
 WEIGHT_DECAY = 1e-4
 USE_AMP = True
 GRAD_CLIP_NORM = 1.0
-EARLY_STOPPING_PATIENCE = 20
+EARLY_STOPPING_PATIENCE = 50
 
 ENFORCE_BINARY_CLASSIFICATION = True
 EXPECTED_NUM_CLASSES = 2
@@ -50,18 +50,18 @@ TRAIN_DIR = DATA_ROOT / 'train'
 VAL_DIR = DATA_ROOT / 'val'
 TEST_DIR = DATA_ROOT / 'test'
 
-MODEL_NAME = 'CNN2_ViT_Seq_4'
+MODEL_NAME = 'CNNVIT512V1'
 MODEL_DIR = Path('trained_models')
 MODEL_DIR.mkdir(parents=True, exist_ok=True)
-CHECKPOINT_PATH = MODEL_DIR / 'cnn2_vit_seq_4_checkpoint.pt'
-BEST_MODEL_PATH = MODEL_DIR / 'cnn2_vit_seq_4_best.pt'
+CHECKPOINT_PATH = MODEL_DIR / 'CNNVIT512V1_checkpoint.pt'
+BEST_MODEL_PATH = MODEL_DIR / 'CNNVIT512V1_best.pt'
 
 # Optional explizit setzen. Mögliche Werte:
 # 1) Datei mit {'model_state_dict': ...} oder direktem state_dict
 # 2) Artefakt-Ordner mit model_state_dict.pt + metadata.json
 PRETRAINED_CNN_SOURCE: Path | None = None
 PRETRAINED_CNN_METADATA_PATH: Path | None = (
-    MODEL_DIR / 'CNN_2"_score-0.9909_20260429_001737' / 'metadata.json'
+    MODEL_DIR / 'CNN_512"_score-0.9942_20260517_013424' / 'metadata.json'
 )
 
 # Falls Metadata/Checkpoint unvollständig sind, können Architekturwerte hier
@@ -71,20 +71,20 @@ CNN_HPARAMS_OVERRIDE: dict[str, Any] = {}
 # CNN-Backbone standardmäßig komplett einfrieren. Optional können letzte
 # Convolution-Blöcke wieder freigegeben werden.
 FREEZE_CNN_BACKBONE = True
-UNFREEZE_LAST_CONV_BLOCKS = 0
+UNFREEZE_LAST_CONV_BLOCKS = 1
 
 # Transformer-Konfiguration
-VIT_EMBED_DIM = 256
+VIT_EMBED_DIM = 512
 VIT_NUM_HEADS = 16
-VIT_DEPTH = 3
+VIT_DEPTH = 8
 VIT_MLP_RATIO = 4.0
 VIT_DROPOUT = 0.2
 
 # Klassen-Ungleichgewicht und On-the-fly-Augs analog zur Optuna-CNN-Pipeline,
 # aus der CNN_score-0.9924_20260426_081737 stammt.
 CLASS_REPEAT_FACTORS: dict[str, int] = {
-    'y': 12,
-    'n': 4,
+    'y': 26,
+    'n': 8,
 }
 
 CLASS_AUGMENTATION_CONFIG = {
@@ -889,10 +889,12 @@ def resolve_pretrained_cnn_source(explicit_source: Path | None) -> Path:
         raise FileNotFoundError(f'Configured PRETRAINED_CNN_SOURCE does not exist: {explicit_source}')
 
     preferred_candidates = [
-        MODEL_DIR / 'Simple_CNN_2.pt',
-        MODEL_DIR / 'Simple_CNN.pt',
-        MODEL_DIR / 'CNN_score-0.9924_20260426_081737' / 'model_state_dict.pt',
-        MODEL_DIR / 'CNN_score-0.9924_20260426_081737',
+        #MODEL_DIR / 'Simple_CNN_2.pt',
+        #MODEL_DIR / 'Simple_CNN.pt',
+        #MODEL_DIR / 'CNN_score-0.9924_20260426_081737' / 'model_state_dict.pt',
+        #MODEL_DIR / 'CNN_score-0.9924_20260426_081737',
+        MODEL_DIR / 'CNN_4_Best_of_two"_score-0.9898_20260516_174615',
+
     ]
     for candidate in preferred_candidates:
         if candidate.is_file():
@@ -1313,7 +1315,8 @@ def main() -> None:
         raise RuntimeError('No trainable parameters found. Check backbone freeze settings.')
 
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.AdamW(trainable_params, lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
+    base_lr = LEARNING_RATE
+    optimizer = optim.AdamW(trainable_params, lr=base_lr, weight_decay=WEIGHT_DECAY)
     scaler = GradScaler(enabled=USE_AMP and device.type == 'cuda')
 
     start_epoch, best_val_acc, history = load_training_checkpoint_if_available(
@@ -1328,6 +1331,19 @@ def main() -> None:
 
     epochs_without_improvement = 0
     for epoch in range(start_epoch, NUM_EPOCHS):
+        # LR-Schedule ohne globales LEARNING_RATE zu überschreiben
+        if epoch >= 150:
+            current_lr = 1e-7
+        elif epoch >= 100:
+            current_lr = 1e-6
+        elif epoch >= 50:
+            current_lr = 1e-5
+        else:
+            current_lr = base_lr
+
+        for pg in optimizer.param_groups:
+            pg['lr'] = current_lr
+
         train_metrics = train_one_epoch(
             model=model,
             loader=loaders['train'],
@@ -1382,7 +1398,7 @@ def main() -> None:
             f'Epoch {epoch + 1}/{NUM_EPOCHS} | '
             f"train_loss={train_metrics['loss']:.4f}, train_acc={train_metrics['accuracy']:.4f}, "
             f"val_loss={val_metrics['loss']:.4f}, val_acc={val_metrics['accuracy']:.4f}, "
-            f'best_val_acc={best_val_acc:.4f}'
+            f'best_val_acc={best_val_acc:.4f}, lr={current_lr:.1e}'
         )
 
         if EARLY_STOPPING_PATIENCE > 0 and epochs_without_improvement >= EARLY_STOPPING_PATIENCE:
@@ -1458,7 +1474,7 @@ def main() -> None:
         'batch_size': BATCH_SIZE,
         'num_workers': NUM_WORKERS,
         'num_epochs': NUM_EPOCHS,
-        'learning_rate': LEARNING_RATE,
+        'learning_rate': base_lr,
         'weight_decay': WEIGHT_DECAY,
         'use_amp': USE_AMP,
         'grad_clip_norm': GRAD_CLIP_NORM,
@@ -1499,7 +1515,6 @@ def main() -> None:
     )
     final_results['artifact_dir'] = str(artifact_dir)
     print(final_results)
-
 
 if __name__ == '__main__':
     main()

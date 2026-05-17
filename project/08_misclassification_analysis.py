@@ -58,9 +58,9 @@ MODEL_DIR = PROJECT_DIR / 'trained_models'
 # - artifact directory: trained_models/<artifact>
 CHECKPOINT_SOURCE: Path | None = None
 
-DEFAULT_BEST_CHECKPOINT = MODEL_DIR / 'cnn_vit_seq_cnn9924_best.pt'
-MODEL_ARTIFACT_PREFIX = 'CNN9924_ViT_Hybrid_Seq_score-'
-ANALYSIS_PREFIX = 'misclassification_analysis'
+DEFAULT_BEST_CHECKPOINT = MODEL_DIR / 'Big_Trans_3_Best.pt'
+MODEL_ARTIFACT_PREFIX = 'Big_Trans_3_score-'
+ANALYSIS_PREFIX = '../model_analysis/Big_Trans_3_misclassification_analysis'
 
 
 @dataclass

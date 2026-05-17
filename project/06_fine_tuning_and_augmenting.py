@@ -34,11 +34,11 @@ TRAIN_DIR = DATA_ROOT / 'train'
 VAL_DIR = DATA_ROOT / 'val'
 TEST_DIR = DATA_ROOT / 'test'
 
-MODEL_NAME = 'resnet152_b_Finetune_OnTheFlyAug_b_class_weights_true'
+MODEL_NAME = 'resnet18_A_Finetune_OnTheFlyAug_class_weights_true'
 MODEL_DIR = Path('trained_models')
 MODEL_DIR.mkdir(parents=True, exist_ok=True)
-CHECKPOINT_PATH = MODEL_DIR / 'resnet152_b_finetune_onthefly_checkpoint.pt'
-BEST_MODEL_PATH = MODEL_DIR / 'resnet152_b_finetune_onthefly_best.pt'
+CHECKPOINT_PATH = MODEL_DIR / 'resnet18_A_finetune_onthefly_checkpoint.pt'
+BEST_MODEL_PATH = MODEL_DIR / 'resnet18_A_finetune_onthefly_best.pt'
 
 
 # =========================
@@ -46,8 +46,8 @@ BEST_MODEL_PATH = MODEL_DIR / 'resnet152_b_finetune_onthefly_best.pt'
 # =========================
 # Oversampling
 CLASS_REPEAT_FACTORS: dict[str, int] = {
-    'y': 36,
-    'n': 4,
+    'y': 26,
+    'n': 8,
 }
 
 # Augmentierung
@@ -316,8 +316,8 @@ def build_dataloaders() -> tuple[dict[str, DataLoader], int, dict[str, int], Cla
 
 
 def build_model(num_classes: int, device: torch.device) -> nn.Module:
-    weights = models.ResNet152_Weights.DEFAULT
-    model = models.resnet152(weights=weights)
+    weights = models.ResNet18_Weights.DEFAULT
+    model = models.resnet18(weights=weights)
 
 
     for p in model.parameters():

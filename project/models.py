@@ -45,7 +45,7 @@ class SimpleCNN(nn.Module):
         activation: str = "relu",         # relu | elu | swish
         dropout_rate: float = 0.0,
         num_classes: int = 10,
-        conv_channels: tuple[int, int, int, int, int] = (32, 64, 128, 256, 256),  # fix
+        conv_channels: tuple[int, int, int, int, int] = (32, 64, 128, 256, 512),  # fix
         kernel_size: int = 3,
         pool_type: str = "max",
         use_batchnorm: bool = False,
