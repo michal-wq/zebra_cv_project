@@ -64,9 +64,10 @@ MODEL_ARTIFACT_PREFIXES = [
     'CNN_ViT',
 ]
 
-SAMPLE_MODE = 'misclassified'  # misclassified | low_confidence_correct | high_confidence | all
+SAMPLE_MODE = 'true_positive'
 MAX_IMAGES = 64
-TARGET_MODE = 'pred'  # pred | true | both
+TARGET_MODE = 'true'  # pred | true | both
+POSITIVE_CLASS_LABEL = 'y'
 FALLBACK_TO_LOW_CONFIDENCE_CORRECT = True
 
 HEATMAP_CMAP = 'jet'
@@ -327,6 +328,43 @@ def select_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Selects samples for Grad-CAM generation."""
     misclassified = [r for r in rows if int(r['is_misclassified']) == 1]
     correct = [r for r in rows if int(r['is_misclassified']) == 0]
+    positives = [
+        r for r in rows
+        if str(r['true_label']) == POSITIVE_CLASS_LABEL
+        or str(r['pred_label']) == POSITIVE_CLASS_LABEL
+    ]
+
+    if SAMPLE_MODE == 'true_positive':
+        selected = [
+            r for r in positives
+            if str(r['true_label']) == POSITIVE_CLASS_LABEL
+            and str(r['pred_label']) == POSITIVE_CLASS_LABEL
+        ]
+        return sorted(selected, key=lambda r: float(r['pred_prob']), reverse=True)[:MAX_IMAGES]
+
+    if SAMPLE_MODE == 'false_positive':
+        selected = [
+            r for r in positives
+            if str(r['true_label']) != POSITIVE_CLASS_LABEL
+            and str(r['pred_label']) == POSITIVE_CLASS_LABEL
+        ]
+        return sorted(selected, key=lambda r: float(r['pred_prob']), reverse=True)[:MAX_IMAGES]
+
+    if SAMPLE_MODE == 'false_negative':
+        selected = [
+            r for r in positives
+            if str(r['true_label']) == POSITIVE_CLASS_LABEL
+            and str(r['pred_label']) != POSITIVE_CLASS_LABEL
+        ]
+        return sorted(selected, key=lambda r: float(r['true_prob']))[:MAX_IMAGES]
+
+    if SAMPLE_MODE == 'true_negative':
+        selected = [
+            r for r in rows
+            if str(r['true_label']) != POSITIVE_CLASS_LABEL
+            and str(r['pred_label']) != POSITIVE_CLASS_LABEL
+        ]
+        return sorted(selected, key=lambda r: float(r['pred_prob']), reverse=True)[:MAX_IMAGES]
 
     if SAMPLE_MODE == 'misclassified':
         selected = sorted(
@@ -348,8 +386,9 @@ def select_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         return rows[:MAX_IMAGES]
 
     raise ValueError(
-        "SAMPLE_MODE must be one of 'misclassified', 'low_confidence_correct', "
-        "'high_confidence', or 'all'."
+        "SAMPLE_MODE must be one of 'true_positive', 'false_positive', "
+        "'false_negative', 'true_negative', 'misclassified', "
+        "'low_confidence_correct', 'high_confidence', or 'all'."
     )
 
 
