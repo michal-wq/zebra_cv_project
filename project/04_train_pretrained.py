@@ -1,4 +1,4 @@
-"""Fine-tunes a pretrained ResNet18 on local zebra data with checkpoint resume."""
+"""Fine-tunes a pretrained ResNet18 on local zebra data with on-the-fly augmentation."""
 
 from pathlib import Path
 
@@ -21,7 +21,7 @@ LEARNING_RATE = 1e-4
 WEIGHT_DECAY = 1e-4
 
 DATA_ROOT = Path("data")
-TRAIN_DIR = DATA_ROOT / "augmented_train_data"
+TRAIN_DIR = DATA_ROOT / "train"
 VAL_DIR = DATA_ROOT / "val"
 TEST_DIR = DATA_ROOT / "test"
 
@@ -30,6 +30,27 @@ MODEL_DIR = Path("trained_models")
 MODEL_DIR.mkdir(parents=True, exist_ok=True)
 CHECKPOINT_PATH = MODEL_DIR / "resnet18_finetune_checkpoint.pt"
 BEST_MODEL_PATH = MODEL_DIR / "resnet18_finetune_best.pt"
+
+TRAIN_AUGMENTATION_CONFIG = {
+    "random_resized_crop_scale": (0.75, 1.0),
+    "horizontal_flip_prob": 0.5,
+    "rotation_degrees": 15,
+    "perspective_prob": 0.25,
+    "perspective_distortion_scale": 0.25,
+    "color_jitter": {
+        "brightness": 0.25,
+        "contrast": 0.25,
+        "saturation": 0.2,
+        "hue": 0.06,
+    },
+    "autocontrast_prob": 0.1,
+    "gaussian_blur_prob": 0.15,
+    "gaussian_blur_kernel_size": 5,
+    "gaussian_blur_sigma": (0.1, 1.5),
+    "random_erasing_prob": 0.15,
+    "random_erasing_scale": (0.02, 0.12),
+    "random_erasing_ratio": (0.3, 3.3),
+}
 
 
 def get_device() -> torch.device:
@@ -43,11 +64,40 @@ def get_device() -> torch.device:
 def build_dataloaders() -> tuple[dict[str, DataLoader], int, dict[str, int]]:
     train_tfms = transforms.Compose(
         [
-            transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
-            transforms.RandomHorizontalFlip(p=0.5),
-            transforms.RandomRotation(degrees=10),
+            transforms.RandomResizedCrop(
+                IMAGE_SIZE,
+                scale=TRAIN_AUGMENTATION_CONFIG["random_resized_crop_scale"],
+            ),
+            transforms.RandomHorizontalFlip(
+                p=TRAIN_AUGMENTATION_CONFIG["horizontal_flip_prob"],
+            ),
+            transforms.RandomRotation(
+                degrees=TRAIN_AUGMENTATION_CONFIG["rotation_degrees"],
+            ),
+            transforms.RandomPerspective(
+                distortion_scale=TRAIN_AUGMENTATION_CONFIG["perspective_distortion_scale"],
+                p=TRAIN_AUGMENTATION_CONFIG["perspective_prob"],
+            ),
+            transforms.ColorJitter(**TRAIN_AUGMENTATION_CONFIG["color_jitter"]),
+            transforms.RandomAutocontrast(
+                p=TRAIN_AUGMENTATION_CONFIG["autocontrast_prob"],
+            ),
+            transforms.RandomApply(
+                [
+                    transforms.GaussianBlur(
+                        kernel_size=TRAIN_AUGMENTATION_CONFIG["gaussian_blur_kernel_size"],
+                        sigma=TRAIN_AUGMENTATION_CONFIG["gaussian_blur_sigma"],
+                    ),
+                ],
+                p=TRAIN_AUGMENTATION_CONFIG["gaussian_blur_prob"],
+            ),
             transforms.ToTensor(),
             transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+            transforms.RandomErasing(
+                p=TRAIN_AUGMENTATION_CONFIG["random_erasing_prob"],
+                scale=TRAIN_AUGMENTATION_CONFIG["random_erasing_scale"],
+                ratio=TRAIN_AUGMENTATION_CONFIG["random_erasing_ratio"],
+            ),
         ]
     )
 
@@ -225,6 +275,7 @@ def main() -> None:
                 "optimizer_state_dict": optimizer.state_dict(),
                 "class_to_idx": class_to_idx,
                 "history": history,
+                "train_augmentation_config": TRAIN_AUGMENTATION_CONFIG,
             },
             CHECKPOINT_PATH,
         )
@@ -239,6 +290,7 @@ def main() -> None:
                     "optimizer_state_dict": optimizer.state_dict(),
                     "class_to_idx": class_to_idx,
                     "history": history,
+                    "train_augmentation_config": TRAIN_AUGMENTATION_CONFIG,
                 },
                 BEST_MODEL_PATH,
             )
@@ -293,6 +345,8 @@ def main() -> None:
         "num_epochs": NUM_EPOCHS,
         "learning_rate": LEARNING_RATE,
         "weight_decay": WEIGHT_DECAY,
+        "train_dir": str(TRAIN_DIR),
+        "train_augmentation_config": TRAIN_AUGMENTATION_CONFIG,
     }
 
     artifact_dir = save_best_model_artifacts(
