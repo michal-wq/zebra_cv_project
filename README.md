@@ -27,6 +27,34 @@ uv run python 05_evaluate_trained_model.py
 
 Die Hugging-Face-Repositories sind public gedacht. Dafuer wird kein Hugging-Face-Account und kein Token benoetigt.
 
+## Empfohlener Dozenten-Run
+
+Fuer eine einfache Pruefung des besten Modells gibt es ein eigenes Skript fuer `Big_Trans_3`. Es laedt bei Bedarf Daten und Modell von Hugging Face, baut die passende Architektur aus `metadata.json` nach und evaluiert den Testsplit.
+
+Aus dem Repository-Root:
+
+```bash
+uv run python project/run_big_trans_3.py --download
+```
+
+Wenn Daten und Modell bereits heruntergeladen wurden:
+
+```bash
+uv run python project/run_big_trans_3.py
+```
+
+Ein einzelnes Bild klassifizieren:
+
+```bash
+uv run python project/run_big_trans_3.py --image path/to/image.png
+```
+
+Das Skript schreibt die Testergebnisse nach:
+
+```text
+project/big_trans_3_evaluation_results.json
+```
+
 ## Voraussetzungen
 
 - Git
@@ -60,6 +88,7 @@ zebra_cv_project/
     07_cnn_vit_seq.py
     08_misclassification_analysis.py
     10_grad_cam_cnn_vit.py
+    run_big_trans_3.py
     prep_training.py
     training_functions.py
 ```

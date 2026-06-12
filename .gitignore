@@ -9,6 +9,7 @@ project/split_build_logs/
 project/review_candidates/
 project/label_correction_logs/
 project/model_analysis/
+project/big_trans_3_evaluation_results.json
 # Trainingsartefakte
 project/model_data/
 *.pt
