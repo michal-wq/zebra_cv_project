@@ -211,6 +211,11 @@ def load_big_trans_3(device: torch.device, num_classes: int):
         metadata,
         checkpoint_payload=payload,
     )
+    if isinstance(hybrid_cfg.get('resolved_cnn_hparams'), dict):
+        hybrid_cfg['pretrained_cnn_source'] = None
+        hybrid_cfg['pretrained_cnn_metadata_path'] = None
+        hybrid_cfg['pretrained_cnn_source_resolution'] = 'model_state_dict:self_contained_backbone'
+
     model, model_info = analysis.build_model_for_inference(
         cnn_module=cnn_vit_module,
         num_classes=num_classes,
@@ -281,10 +286,11 @@ def evaluate_test_set(device: torch.device, batch_size: int, num_workers: int, o
     all_preds: list[int] = []
     all_probs: list[float] = []
     amp_enabled = device.type == 'cuda'
+    amp_device_type = 'cuda' if device.type == 'cuda' else 'cpu'
 
     for xb, yb in loader:
         xb = xb.to(device, non_blocking=device.type == 'cuda')
-        with torch.autocast(device_type='cuda', enabled=amp_enabled):
+        with torch.autocast(device_type=amp_device_type, enabled=amp_enabled):
             logits = model(xb)
         probs = torch.softmax(logits, dim=1)
         preds = probs.argmax(dim=1)
