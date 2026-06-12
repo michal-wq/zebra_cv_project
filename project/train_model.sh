@@ -6,17 +6,12 @@
 #SBATCH --job-name="Model Training"   ## Job Name.
 #SBATCH --partition=students	 ## Partitionsname. Die zur Verfügung stehenden Partitionen können mit dem Befehl sinfo angezeigt werden
 #SBATCH --mem=32G               ## Der Arbeitsspeicher, welcher für den Job reserviert wird
-<<<<<<< Updated upstream
-#SBATCH --cpus-per-task=12     ## Die Anzahl virtueller Cores, die für den Job reserviert werden
-#SBATCH --gres=gpu:a100:1
-
-uv run 04_train_pretrained.py
-## uv run 07_cnn_vit_seq.py
-## uv run 06_fine_tuning_and_augmenting.py
-## uv run 03_optuna_training_pipeline.py
-=======
 #SBATCH --cpus-per-task=20     ## Die Anzahl virtueller Cores, die für den Job reserviert werden
 #SBATCH --gres=gpu:a100:1
 
 uv run 07_cnn_vit_seq.py
->>>>>>> Stashed changes
+
+## Alternative Trainingsskripte:
+## uv run 04_train_pretrained.py
+## uv run 06_fine_tuning_and_augmenting.py
+## uv run 03_optuna_training_pipeline.py

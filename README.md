@@ -169,6 +169,20 @@ uv run python 04_train_pretrained.py
 uv run python 07_cnn_vit_seq.py
 ```
 
+Auf einem SLURM-Cluster kann fuer das Modelltraining auch das Bash-Skript verwendet werden:
+
+```bash
+cd project
+sbatch train_model.sh
+```
+
+Ohne SLURM kann das Skript lokal gestartet werden, sofern die passende GPU-/Python-Umgebung vorhanden ist:
+
+```bash
+cd project
+bash train_model.sh
+```
+
 Neue Modellartefakte werden unter `project/trained_models/` gespeichert.
 
 ## Daten neu splitten
