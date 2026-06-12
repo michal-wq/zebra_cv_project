@@ -17,9 +17,11 @@ cd zebra_cv_project
 uv sync
 
 uvx hf download kamichal/zebra-cv-data \
+  data_archive/zebra-cv-data-train-val-test.tar.gz \
   --repo-type dataset \
-  --local-dir project \
-  --include "data/*"
+  --local-dir .
+
+tar -xzf data_archive/zebra-cv-data-train-val-test.tar.gz -C project
 
 uvx hf download kamichal/zebra-cv-checkpoints \
   --local-dir project \
