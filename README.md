@@ -109,9 +109,11 @@ Trainings-, Validierungs- und Testdaten:
 
 ```bash
 uvx hf download kamichal/zebra-cv-data \
+  data_archive/zebra-cv-data-train-val-test.tar.gz \
   --repo-type dataset \
-  --local-dir project \
-  --include "data/*"
+  --local-dir .
+
+tar -xzf data_archive/zebra-cv-data-train-val-test.tar.gz -C project
 ```
 
 Trainierte Modelle und Ergebnisdateien:
