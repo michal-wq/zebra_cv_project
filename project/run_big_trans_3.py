@@ -1,16 +1,3 @@
-"""Lecturer-friendly runner for the Big_Trans_3 zebra classifier.
-
-The script can:
-- download the required public Hugging Face artifacts,
-- evaluate Big_Trans_3 on project/data/test,
-- classify a single image.
-
-Run from the repository root:
-    uv run python project/run_big_trans_3.py --download
-    uv run python project/run_big_trans_3.py
-    uv run python project/run_big_trans_3.py --image path/to/image.png
-"""
-
 from __future__ import annotations
 
 import argparse

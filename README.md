@@ -27,7 +27,7 @@ uv run python 05_evaluate_trained_model.py
 
 Die Hugging-Face-Repositories sind public gedacht. Dafuer wird kein Hugging-Face-Account und kein Token benoetigt.
 
-## Empfohlener Dozenten-Run
+## Big_Trans_3 Ausfuehren
 
 Fuer eine einfache Pruefung des besten Modells gibt es ein eigenes Skript fuer `Big_Trans_3`. Es laedt bei Bedarf Daten und Modell von Hugging Face, baut die passende Architektur aus `metadata.json` nach und evaluiert den Testsplit.
 
