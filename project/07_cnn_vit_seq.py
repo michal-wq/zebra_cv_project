@@ -35,12 +35,12 @@ SEED = 77
 IMAGE_SIZE = 224
 BATCH_SIZE = 32
 NUM_WORKERS = 16
-NUM_EPOCHS = 1
-LEARNING_RATE = 1e-4
-WEIGHT_DECAY = 1e-4
+NUM_EPOCHS = 200
+LEARNING_RATE = 0.0002443855945462861
+WEIGHT_DECAY = 0.0009819663619102651
 USE_AMP = True
 GRAD_CLIP_NORM = 1.0
-EARLY_STOPPING_PATIENCE = 50
+EARLY_STOPPING_PATIENCE = 55
 
 ENFORCE_BINARY_CLASSIFICATION = True
 EXPECTED_NUM_CLASSES = 2
@@ -50,18 +50,21 @@ TRAIN_DIR = DATA_ROOT / 'train'
 VAL_DIR = DATA_ROOT / 'val'
 TEST_DIR = DATA_ROOT / 'test'
 
-MODEL_NAME = 'CNNVIT512V1'
+MODEL_NAME = 'Last_model_VITCNN512'
 MODEL_DIR = Path('trained_models')
 MODEL_DIR.mkdir(parents=True, exist_ok=True)
-CHECKPOINT_PATH = MODEL_DIR / 'CNNVIT512V1_checkpoint.pt'
-BEST_MODEL_PATH = MODEL_DIR / 'CNNVIT512V1_best.pt'
+CHECKPOINT_PATH = MODEL_DIR / 'Last_model_VITCNN512_checkpoint.pt'
+BEST_MODEL_PATH = MODEL_DIR / 'Last_model_VITCNN512_best.pt'
 
 # Optional explizit setzen. Mögliche Werte:
 # 1) Datei mit {'model_state_dict': ...} oder direktem state_dict
 # 2) Artefakt-Ordner mit model_state_dict.pt + metadata.json
-PRETRAINED_CNN_SOURCE: Path | None = None
+PRETRAINED_CNN_SOURCE: Path | None = (
+    MODEL_DIR / 'CNN_512"_score-0.9942_20260517_100438'  # Ordner mit model_state_dict.pt
+)
+
 PRETRAINED_CNN_METADATA_PATH: Path | None = (
-    MODEL_DIR / 'CNN_512"_score-0.9942_20260517_013424' / 'metadata.json'
+    MODEL_DIR / 'CNN_512"_score-0.9942_20260517_100438' / 'metadata.json'
 )
 
 # Falls Metadata/Checkpoint unvollständig sind, können Architekturwerte hier
@@ -76,9 +79,9 @@ UNFREEZE_LAST_CONV_BLOCKS = 1
 # Transformer-Konfiguration
 VIT_EMBED_DIM = 512
 VIT_NUM_HEADS = 16
-VIT_DEPTH = 8
-VIT_MLP_RATIO = 4.0
-VIT_DROPOUT = 0.2
+VIT_DEPTH = 2
+VIT_MLP_RATIO = 3.0
+VIT_DROPOUT = 0.0
 
 # Klassen-Ungleichgewicht und On-the-fly-Augs analog zur Optuna-CNN-Pipeline,
 # aus der CNN_score-0.9924_20260426_081737 stammt.
@@ -1334,9 +1337,9 @@ def main() -> None:
         # LR-Schedule ohne globales LEARNING_RATE zu überschreiben
         if epoch >= 150:
             current_lr = 1e-7
-        elif epoch >= 100:
+        elif epoch >= 75:
             current_lr = 1e-6
-        elif epoch >= 50:
+        elif epoch >= 3:
             current_lr = 1e-5
         else:
             current_lr = base_lr

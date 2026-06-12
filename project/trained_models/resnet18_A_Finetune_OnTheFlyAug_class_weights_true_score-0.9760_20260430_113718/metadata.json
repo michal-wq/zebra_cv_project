@@ -1,0 +1,87 @@
+{
+  "model_name": "resnet18_A_Finetune_OnTheFlyAug_class_weights_true",
+  "score": 0.9760348583877996,
+  "params": {
+    "seed": 77,
+    "image_size": 224,
+    "batch_size": 256,
+    "num_workers": 24,
+    "num_epochs": 100,
+    "learning_rate": 1e-06,
+    "weight_decay": 0.0001,
+    "train_dir": "data/train",
+    "class_repeat_factors": {
+      "y": 26,
+      "n": 8
+    },
+    "class_augmentation_config": {
+      "y": {
+        "apply_prob": 1.0,
+        "hflip_prob": 0.35,
+        "rotation_deg": 8,
+        "perspective_prob": 0.3,
+        "affine_prob": 0.3,
+        "affine_deg": 6,
+        "affine_translate": [
+          0.08,
+          0.08
+        ],
+        "affine_scale": [
+          0.9,
+          1.1
+        ],
+        "blur_prob": 0.2,
+        "color_jitter": [
+          0.25,
+          0.25,
+          0.25,
+          0.08
+        ],
+        "grayscale_prob": 0.08,
+        "autocontrast_prob": 0.1,
+        "equalize_prob": 0.05,
+        "sharpness_prob": 0.1,
+        "sharpness_factor": 1.8,
+        "solarize_prob": 0.04,
+        "posterize_prob": 0.04,
+        "posterize_bits": 4,
+        "randaugment_prob": 0.2,
+        "randaugment_num_ops": 2,
+        "randaugment_magnitude": 6
+      },
+      "n": {
+        "apply_prob": 0.9,
+        "hflip_prob": 0.25,
+        "rotation_deg": 6,
+        "perspective_prob": 0.2,
+        "affine_prob": 0.2,
+        "affine_deg": 4,
+        "affine_translate": [
+          0.05,
+          0.05
+        ],
+        "affine_scale": [
+          0.95,
+          1.05
+        ],
+        "blur_prob": 0.12,
+        "color_jitter": [
+          0.18,
+          0.18,
+          0.18,
+          0.06
+        ],
+        "grayscale_prob": 0.05,
+        "autocontrast_prob": 0.06,
+        "equalize_prob": 0.04,
+        "sharpness_prob": 0.06,
+        "sharpness_factor": 1.5,
+        "randaugment_prob": 0.1,
+        "randaugment_num_ops": 2,
+        "randaugment_magnitude": 5
+      }
+    },
+    "use_class_weights": true
+  },
+  "created_at": "2026-04-30T11:37:19.269458"
+}

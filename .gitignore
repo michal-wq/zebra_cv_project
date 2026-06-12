@@ -8,7 +8,7 @@ project/data_master/
 project/split_build_logs/
 project/review_candidates/
 project/label_correction_logs/
-
+project/model_analysis/
 # Trainingsartefakte
 project/model_data/
 *.pt
@@ -39,3 +39,5 @@ venv/
 # Betriebssystem-Dateien
 .DS_Store
 Thumbs.db
+
+project/trained_models/*Checkpoint

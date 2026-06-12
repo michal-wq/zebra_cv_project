@@ -42,7 +42,7 @@ ARTIFACT_BASE_DIR = Path('trained_models')
 BEST_MODEL_CHECKPOINT_PATH = ARTIFACT_BASE_DIR / 'CNN_ViT_Seq_Optuna_best.pt'
 STUDY_SUMMARY_PATH = ARTIFACT_BASE_DIR / 'CNN_ViT_Seq_Optuna_study_summary.json'
 
-N_TRIALS = 25
+N_TRIALS = 50
 OPTUNA_EPOCHS = 12
 OPTUNA_PATIENCE = 4
 OPTUNA_PRUNER_STARTUP_TRIALS = 5
@@ -129,9 +129,9 @@ def suggest_trial_params(trial: optuna.Trial) -> dict[str, Any]:
         'vit_embed_dim': embed_dim,
         'vit_num_heads': num_heads,
         'vit_depth': trial.suggest_int('vit_depth', 2, 8),
-        'vit_mlp_ratio': trial.suggest_float('vit_mlp_ratio', 2.0, 5.0, step=0.5),
+        'vit_mlp_ratio': trial.suggest_float('vit_mlp_ratio', 2.0, 5.0, step=1.0),
         'vit_dropout': trial.suggest_float('vit_dropout', 0.0, 0.4, step=0.05),
-        'learning_rate': trial.suggest_float('learning_rate', 1e-5, 5e-4, log=True),
+        'learning_rate': trial.suggest_float('learning_rate', 1e-7, 5e-4, log=True),
         'weight_decay': trial.suggest_float('weight_decay', 1e-6, 1e-2, log=True),
         'optimizer': trial.suggest_categorical('optimizer', ['adamw', 'nadam']),
         'lr_schedule': trial.suggest_categorical('lr_schedule', ['none', 'cosine', 'plateau']),

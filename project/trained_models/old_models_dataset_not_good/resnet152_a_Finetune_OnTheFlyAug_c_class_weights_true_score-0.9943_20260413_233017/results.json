@@ -1,0 +1,36 @@
+{
+  "test_loss": 0.03769314404389939,
+  "test_accuracy": 0.9942685589519651,
+  "test_precision_weighted": 0.9942685589519651,
+  "test_recall_weighted": 0.9942685589519651,
+  "test_f1_weighted": 0.9942685589519651,
+  "test_precision_macro": 0.9748789967792331,
+  "test_recall_macro": 0.9748789967792331,
+  "test_f1_macro": 0.9748789967792331,
+  "best_val_accuracy": 0.9955527318932655,
+  "best_epoch": 70,
+  "checkpoint_path": "trained_models/resnet152_a_finetune_onthefly_checkpoint.pt",
+  "best_model_path": "trained_models/resnet152_a_finetune_onthefly_best.pt",
+  "class_labels": [
+    "n",
+    "y"
+  ],
+  "confusion_matrix": [
+    [
+      6862,
+      21
+    ],
+    [
+      21,
+      424
+    ]
+  ],
+  "train_original_class_counts": {
+    "n": 38041,
+    "y": 5227
+  },
+  "train_effective_class_counts": {
+    "n": 152164,
+    "y": 188172
+  }
+}

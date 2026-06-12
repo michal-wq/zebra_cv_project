@@ -2,13 +2,21 @@
 
 #SBATCH --output="SLURM_SUBMIT_DIR/slurm-%j.out"  ## Im Verzeichnis aus dem sbatch aufgerufen wird, wird ein Logfile mit dem Namen slurm-[Jobid].out erstellt.
 #SBATCH --error="SLURM_SUBMIT_DIR/slurm-%j.err"   ## Ähnlich wie --output. Jedoch ein Log für Fehlermeldungen.
-#SBATCH --time=48:00:00           ## Zeitlimite. Diese sollte gleich oder kleiner der Partitions Zeitlimite sein. In diesem Fall ist diese auf 1 Stunde und 30 Minuten gesetzt.
+#SBATCH --time=24:00:00           ## Zeitlimite. Diese sollte gleich oder kleiner der Partitions Zeitlimite sein. In diesem Fall ist diese auf 1 Stunde und 30 Minuten gesetzt.
 #SBATCH --job-name="Model Training"   ## Job Name.
 #SBATCH --partition=students	 ## Partitionsname. Die zur Verfügung stehenden Partitionen können mit dem Befehl sinfo angezeigt werden
 #SBATCH --mem=32G               ## Der Arbeitsspeicher, welcher für den Job reserviert wird
+<<<<<<< Updated upstream
 #SBATCH --cpus-per-task=12     ## Die Anzahl virtueller Cores, die für den Job reserviert werden
 #SBATCH --gres=gpu:a100:1
 
-uv run 07_cnn_vit_seq.py
+uv run 04_train_pretrained.py
+## uv run 07_cnn_vit_seq.py
 ## uv run 06_fine_tuning_and_augmenting.py
 ## uv run 03_optuna_training_pipeline.py
+=======
+#SBATCH --cpus-per-task=20     ## Die Anzahl virtueller Cores, die für den Job reserviert werden
+#SBATCH --gres=gpu:a100:1
+
+uv run 07_cnn_vit_seq.py
+>>>>>>> Stashed changes

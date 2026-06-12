@@ -1,0 +1,28 @@
+{
+  "test_loss": 0.05478277521109183,
+  "test_accuracy": 0.9782135076252724,
+  "test_precision_weighted": 0.9780744776480838,
+  "test_recall_weighted": 0.9782135076252724,
+  "test_f1_weighted": 0.9779748717206935,
+  "test_precision_macro": 0.9737794444242182,
+  "test_recall_macro": 0.9534630073595005,
+  "test_f1_macro": 0.9632305819020763,
+  "best_val_accuracy": 0.978909090909091,
+  "best_epoch": 99,
+  "checkpoint_path": "trained_models/new_DA_resnet18_finetune_checkpoint.pt",
+  "best_model_path": "trained_models/new_DA_resnet18_finetune_best.pt",
+  "class_labels": [
+    "n",
+    "y"
+  ],
+  "confusion_matrix": [
+    [
+      1113,
+      8
+    ],
+    [
+      22,
+      234
+    ]
+  ]
+}

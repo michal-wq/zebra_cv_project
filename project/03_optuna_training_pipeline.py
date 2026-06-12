@@ -671,7 +671,7 @@ print(f'Trainiere bestes Modell mit {FINAL_TRAIN_EPOCHS} Epochen...')
 print('=' * 60)
 
 p = best.params
-conv_channels = (32, 64, 128, 256, 256)
+conv_channels = (32, 64, 128, 256, 512)
 
 best_model = SimpleCNN(
     n_fc_layers=p['n_fc_layers'],

@@ -14,10 +14,10 @@ from training_functions import save_best_model_artifacts
 
 SEED = 77
 IMAGE_SIZE = 224
-BATCH_SIZE = 32
-NUM_WORKERS = 8
-NUM_EPOCHS = 20
-LEARNING_RATE = 1e-4
+BATCH_SIZE = 256
+NUM_WORKERS = 16
+NUM_EPOCHS = 100
+LEARNING_RATE = 1e-5
 WEIGHT_DECAY = 1e-4
 
 DATA_ROOT = Path("data")
@@ -25,11 +25,11 @@ TRAIN_DIR = DATA_ROOT / "train"
 VAL_DIR = DATA_ROOT / "val"
 TEST_DIR = DATA_ROOT / "test"
 
-MODEL_NAME = "ResNet18_Finetune"
+MODEL_NAME = "New2_ResNet18_Finetune"
 MODEL_DIR = Path("trained_models")
 MODEL_DIR.mkdir(parents=True, exist_ok=True)
-CHECKPOINT_PATH = MODEL_DIR / "resnet18_finetune_checkpoint.pt"
-BEST_MODEL_PATH = MODEL_DIR / "resnet18_finetune_best.pt"
+CHECKPOINT_PATH = MODEL_DIR / "new2_resnet18_finetune_checkpoint.pt"
+BEST_MODEL_PATH = MODEL_DIR / "new2_resnet18_finetune_best.pt"
 
 TRAIN_AUGMENTATION_CONFIG = {
     "random_resized_crop_scale": (0.75, 1.0),

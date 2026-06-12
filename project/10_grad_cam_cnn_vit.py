@@ -57,11 +57,11 @@ DEFAULT_BEST_CHECKPOINTS = [
     MODEL_DIR / 'CNNVIT512V1_best.pt',
 ]
 MODEL_ARTIFACT_PREFIXES = [
-    'CNN_ViT_Seq_Optuna_score-',
-    'Big_Trans_3_score-',
+    #'CNN_ViT_Seq_Optuna_score-',
+    #'Big_Trans_3_score-',
     'CNNVIT512V1_score-',
-    'CNNVIT',
-    'CNN_ViT',
+    #'CNNVIT',
+    #'CNN_ViT',
 ]
 
 SAMPLE_MODE = 'true_positive'
@@ -73,7 +73,7 @@ FALLBACK_TO_LOW_CONFIDENCE_CORRECT = True
 HEATMAP_CMAP = 'jet'
 OVERLAY_ALPHA = 0.45
 PLOT_DPI = 170
-OUTPUT_PREFIX = 'cnn_vit_grad_cam'
+OUTPUT_PREFIX = 'BIT_TRANS_3_TP'
 
 
 @dataclass

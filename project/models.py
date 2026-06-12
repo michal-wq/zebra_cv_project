@@ -44,7 +44,7 @@ class SimpleCNN(nn.Module):
         fc_hidden_size: int = 128,        # wird per Optuna optimiert
         activation: str = "relu",         # relu | elu | swish
         dropout_rate: float = 0.0,
-        num_classes: int = 10,
+        num_classes: int = 2,
         conv_channels: tuple[int, int, int, int, int] = (32, 64, 128, 256, 512),  # fix
         kernel_size: int = 3,
         pool_type: str = "max",

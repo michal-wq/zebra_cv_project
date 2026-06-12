@@ -1,0 +1,62 @@
+{
+  "test_loss": 0.036124936895432815,
+  "test_accuracy": 0.9934640522875817,
+  "test_precision_weighted": 0.993614120620317,
+  "test_recall_weighted": 0.9934640522875817,
+  "test_f1_weighted": 0.9934978937413848,
+  "test_precision_macro": 0.9843420414906034,
+  "test_recall_macro": 0.9944786323595005,
+  "test_f1_macro": 0.9893160569499941,
+  "best_val_accuracy": 0.9832727272727273,
+  "best_epoch": 1,
+  "checkpoint_path": "trained_models/CNNVIT512V2_checkpoint.pt",
+  "best_model_path": "trained_models/CNNVIT512V2_best.pt",
+  "class_labels": [
+    "n",
+    "y"
+  ],
+  "confusion_matrix": [
+    [
+      1113,
+      8
+    ],
+    [
+      1,
+      255
+    ]
+  ],
+  "train_dir": "data/train",
+  "cnn_source": "trained_models/CNN_512\"_score-0.9942_20260517_100438",
+  "cnn_hparams": {
+    "model_variant": "current",
+    "n_fc_layers": 7,
+    "fc_hidden_size": 160,
+    "activation": "swish",
+    "dropout_rate": 0.2,
+    "num_classes": 2,
+    "conv_channels": [
+      32,
+      64,
+      128,
+      256,
+      512
+    ],
+    "kernel_size": 3,
+    "pool_type": "max",
+    "use_batchnorm": true,
+    "cnn_dropout_rate": 0.2
+  },
+  "feature_channels": 512,
+  "feature_grid_size": [
+    14,
+    14
+  ],
+  "train_original_class_counts": {
+    "n": 5238,
+    "y": 1182
+  },
+  "train_effective_class_counts": {
+    "n": 41904,
+    "y": 30732
+  }
+}

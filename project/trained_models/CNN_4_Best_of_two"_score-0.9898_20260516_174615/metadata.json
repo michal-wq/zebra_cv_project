@@ -1,0 +1,19 @@
+{
+  "model_name": "CNN_4_Best_of_two\"",
+  "score": 0.9898329702251271,
+  "params": {
+    "n_fc_layers": 7,
+    "fc_hidden_size": 144,
+    "activation": "swish",
+    "optimizer": "adamw",
+    "lr_schedule": "performance",
+    "learning_rate": 0.0005793300939147358,
+    "dropout_rate": 0.4,
+    "regularizer": "l2",
+    "kernel_size": 3,
+    "pool_type": "max",
+    "use_batchnorm": true,
+    "cnn_dropout_rate": 0.0
+  },
+  "created_at": "2026-05-16T17:46:16.074600"
+}

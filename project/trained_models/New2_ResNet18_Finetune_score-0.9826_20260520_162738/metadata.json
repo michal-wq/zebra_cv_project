@@ -1,0 +1,14 @@
+{
+  "model_name": "New2_ResNet18_Finetune",
+  "score": 0.9825708061002179,
+  "params": {
+    "seed": 77,
+    "image_size": 224,
+    "batch_size": 256,
+    "num_workers": 16,
+    "num_epochs": 100,
+    "learning_rate": 1e-05,
+    "weight_decay": 0.0001
+  },
+  "created_at": "2026-05-20T16:27:38.251524"
+}

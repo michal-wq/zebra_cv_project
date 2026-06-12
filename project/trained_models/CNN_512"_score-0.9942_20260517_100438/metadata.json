@@ -1,0 +1,19 @@
+{
+  "model_name": "CNN_512\"",
+  "score": 0.9941902687000727,
+  "params": {
+    "n_fc_layers": 7,
+    "fc_hidden_size": 160,
+    "activation": "swish",
+    "optimizer": "adamw",
+    "lr_schedule": "onecycle",
+    "learning_rate": 0.000444743157932974,
+    "dropout_rate": 0.2,
+    "regularizer": null,
+    "kernel_size": 3,
+    "pool_type": "max",
+    "use_batchnorm": true,
+    "cnn_dropout_rate": 0.2
+  },
+  "created_at": "2026-05-17T10:04:39.181252"
+}
