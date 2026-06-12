@@ -3,6 +3,7 @@
 Bildklassifikation fuer Zebra / kein Zebra mit PyTorch. Dieses Repository enthaelt den Code, die Trainings- und Evaluationsskripte sowie kleine Ergebnisartefakte. Grosse Trainingsdaten und Modellgewichte werden separat ueber Hugging Face bereitgestellt.
 
 Data: https://huggingface.co/datasets/kamichal/zebra-cv-data
+
 Models: https://huggingface.co/kamichal/zebra-cv-checkpoints
 
 ## Kurzstart
