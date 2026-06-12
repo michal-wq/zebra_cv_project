@@ -1,48 +1,140 @@
-# zebra_cv_project
+# Zebra CV Project
 
-Bildklassifikation (Zebra/kein Zebra) mit PyTorch und Optuna.
+Bildklassifikation fuer Zebra / kein Zebra mit PyTorch. Dieses Repository enthaelt den Code, die Trainings- und Evaluationsskripte sowie kleine Ergebnisartefakte. Grosse Trainingsdaten und Modellgewichte werden separat ueber Hugging Face bereitgestellt.
 
-## Projektüberblick
+## Kurzstart
 
-Dieses Repository enthält den kompletten Trainings-Workflow:
+Diese Befehle laden das GitHub-Repository, installieren die Python-Abhaengigkeiten und holen Daten sowie Modelle von Hugging Face.
 
-1. **Daten aufteilen** in `train/val/test`
-2. **(Optional) Datenaugmentierung**
-3. **Baseline-Training**
-4. **Optuna-Hyperparameteroptimierung + finales Training**
-5. **Speichern von Modellartefakten** (Gewichte, Plots, Metriken)
+```bash
+git clone https://github.com/michal-wq/zebra_cv_project.git
+cd zebra_cv_project
 
-> Rohdaten sind **nicht** im Repository und sollen separat lokal liegen.
+uv sync
 
-## Repository-Struktur
+uvx hf download kamichal/zebra-cv-data \
+  --repo-type dataset \
+  --local-dir project \
+  --include "data/*"
 
-- `project/00_target_data_aug.py` – Augmentierung einzelner Bilder (Optional)
-- `project/01_split_data.py` – Split der Klassendaten in Train/Val/Test
-- `project/02_model_training_pipeline.py` – einfache Baseline-Pipeline
-- `project/03_optuna_training_pipeline.py` – Optuna + finales Training
-- `project/prep_training.py` – DataLoader/Preprocessing-Helfer
-- `project/models.py` – Modellarchitektur (MLP)
-- `project/training_functions.py` – Speichern von Artefakten
-- `pyproject.toml` + `uv.lock` – reproduzierbare Abhängigkeiten
+uvx hf download kamichal/zebra-cv-checkpoints \
+  --local-dir project \
+  --include "trained_models/*"
+
+cd project
+uv run python 05_evaluate_trained_model.py
+```
+
+Die Hugging-Face-Repositories sind public gedacht. Dafuer wird kein Hugging-Face-Account und kein Token benoetigt.
 
 ## Voraussetzungen
 
-- Python `3.12`
-- [uv](https://docs.astral.sh/uv/)
+- Git
+- Python 3.12
+- uv: <https://docs.astral.sh/uv/>
 
-## Setup
-
-Im Repository-Root ausführen:
+Falls `uv` noch nicht installiert ist:
 
 ```bash
-uv sync
+curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-Damit wird die Umgebung aus `pyproject.toml` und `uv.lock` erstellt.
+Danach gegebenenfalls ein neues Terminal oeffnen oder die angezeigte PATH-Anweisung ausfuehren.
 
-## Datenstruktur (lokal, nicht in Git)
+## Projektstruktur
 
-Erwartete Struktur für Rohdaten:
+```text
+zebra_cv_project/
+  pyproject.toml
+  uv.lock
+  README.md
+  project/
+    data/                # wird von Hugging Face geladen
+      train/
+      val/
+      test/
+    trained_models/      # wird von Hugging Face geladen
+    01_split_data.py
+    04_train_pretrained.py
+    05_evaluate_trained_model.py
+    07_cnn_vit_seq.py
+    08_misclassification_analysis.py
+    10_grad_cam_cnn_vit.py
+    prep_training.py
+    training_functions.py
+```
+
+## Daten und Modelle herunterladen
+
+Alle Befehle in diesem Abschnitt werden aus dem Repository-Root ausgefuehrt, also aus `zebra_cv_project/`.
+
+Trainings-, Validierungs- und Testdaten:
+
+```bash
+uvx hf download kamichal/zebra-cv-data \
+  --repo-type dataset \
+  --local-dir project \
+  --include "data/*"
+```
+
+Trainierte Modelle und Ergebnisdateien:
+
+```bash
+uvx hf download kamichal/zebra-cv-checkpoints \
+  --local-dir project \
+  --include "trained_models/*"
+```
+
+Danach sollte die lokale Struktur so aussehen:
+
+```text
+project/data/
+  train/n
+  train/y
+  val/n
+  val/y
+  test/n
+  test/y
+
+project/trained_models/
+  <model_name>/
+    model_state_dict.pt
+    metadata.json
+    results.json
+    confusion_matrix.png
+```
+
+## Evaluation ausfuehren
+
+Die meisten Skripte erwarten, dass sie aus dem Ordner `project/` gestartet werden.
+
+```bash
+cd project
+uv run python 05_evaluate_trained_model.py
+```
+
+Weitere Analyse-Skripte:
+
+```bash
+uv run python 08_misclassification_analysis.py
+uv run python 10_grad_cam_cnn_vit.py
+```
+
+## Training erneut ausfuehren
+
+Wenn die Daten bereits unter `project/data/` liegen, koennen Trainingsskripte ebenfalls aus `project/` gestartet werden.
+
+```bash
+cd project
+uv run python 04_train_pretrained.py
+uv run python 07_cnn_vit_seq.py
+```
+
+Neue Modellartefakte werden unter `project/trained_models/` gespeichert.
+
+## Daten neu splitten
+
+Die Rohdaten sind nicht im GitHub-Repository enthalten. Falls Rohdaten lokal vorhanden sind, erwartet das Split-Skript diese Struktur:
 
 ```text
 raw_data/
@@ -55,187 +147,64 @@ raw_data/
       n/
 ```
 
-Erzeugte Splits liegen danach unter:
+Aus `project/`:
 
-```text
-project/data/
-  train/{y,n}
-  val/{y,n}
-  test/{y,n}
+```bash
+uv run python 01_split_data.py
 ```
 
-## Typischer Workflow
+Das erzeugt:
 
-In den Projektordner wechseln:
+```text
+project/data/train
+project/data/val
+project/data/test
+```
+
+## Artefakte
+
+Ein trainierter Lauf liegt typischerweise in einem eigenen Ordner:
+
+```text
+project/trained_models/<model_name>/
+```
+
+Wichtige Dateien:
+
+- `model_state_dict.pt`: trainierte Modellgewichte fuer Evaluation / Inference
+- `metadata.json`: Hyperparameter und Lauf-Metadaten
+- `results.json`: Metriken
+- `confusion_matrix.png`: Confusion Matrix
+- `history.json`: Trainingsverlauf, falls vorhanden
+- `learning_curves.png`: Lernkurven, falls vorhanden
+
+Grosse vollstaendige Training-Checkpoints werden nicht im GitHub-Repository versioniert. Fuer die Nutzung der Modelle reichen die `model_state_dict.pt` Dateien zusammen mit Code und `metadata.json`.
+
+## Troubleshooting
+
+Wenn Hugging Face beim Download meldet, dass Dateien bereits existieren, ist das normal. Der Befehl kann erneut ausgefuehrt werden.
+
+Wenn ein Skript `data/train`, `data/val` oder `data/test` nicht findet, wurde es wahrscheinlich aus dem falschen Ordner gestartet. In diesem Projekt die Python-Skripte aus `project/` ausfuehren:
 
 ```bash
 cd project
+uv run python 05_evaluate_trained_model.py
 ```
 
-1) Daten splitten:
+Wenn `uvx hf download` nicht funktioniert, zuerst pruefen:
 
 ```bash
-uv run 01_split_data.py
+uv --version
+uvx hf --help
 ```
 
-2) (Optional) Baseline trainieren:
+## Version-Control-Hinweise
 
-```bash
-uv run 02_model_training_pipeline.py
-```
+Nicht in GitHub versioniert werden:
 
-3) Optuna + finales Modell trainieren:
+- Rohdaten
+- generierte Split-Daten
+- grosse Modellgewichte und Checkpoints
+- Logs, Caches und temporaere Dateien
 
-```bash
-uv run 03_optuna_training_pipeline.py
-```
-
-## Ergebnisse / Artefakte
-
-Für jeden besten Lauf wird ein eigener Ordner in `project/trained_models/` erzeugt, z. B.:
-
-```text
-project/trained_models/MLP_optuna_best_score-0.9231_YYYYMMDD_HHMMSS/
-```
-
-Darin u. a.:
-
-- `model_state_dict.pt`
-- `confusion_matrix.png`
-- `learning_curves.png`
-- `history.json`
-- `metadata.json`
-
-## Hinweis zu `requirements.txt`
-
-Für dieses Projekt reicht **uv** mit:
-
-- `pyproject.toml`
-- `uv.lock`
-
-sonst shit aint gonna work (probably not gonna work anyway)
-
-## GitHub-Hinweise
-
-- Trainingsdaten, Rohdaten und Modellartefakte sind absichtlich nicht versioniert.
-- Logs/temporäre Dateien werden über `.gitignore` ausgeschlossen.
-# zebra_cv_project
-
-PyTorch-based image classification pipeline (Zebra vs. Non-Zebra) with Optuna hyperparameter optimization.
-
-## 1. Scope
-
-This repository contains the full training workflow for a binary image classification task:
-
-1. dataset split into `train/val/test`
-2. optional data augmentation utilities
-3. baseline MLP training
-4. Optuna optimization and final model training
-5. artifact export (weights, plots, metrics)
-
-Raw data is intentionally excluded from version control.
-
-## 2. Repository Structure
-
-- `project/00_target_data_aug.py` – batch image augmentation utility
-- `project/01_split_data.py` – class-wise train/val/test split generation
-- `project/02_model_training_pipeline.py` – baseline MLP training pipeline
-- `project/03_optuna_training_pipeline.py` – Optuna search + final training + artifact export
-- `project/prep_training.py` – dataset loading and dataloader helpers
-- `project/models.py` – model definitions (MLP)
-- `project/training_functions.py` – artifact persistence helpers
-- `pyproject.toml` + `uv.lock` – environment and dependency lock
-
-## 3. Requirements
-
-- Python `3.12`
-- [`uv`](https://docs.astral.sh/uv/)
-
-## 4. Environment Setup
-
-Run in repository root:
-
-```bash
-uv sync
-```
-
-## 5. Data Layout
-
-### 5.1 Input Data (local only)
-
-Expected raw data directory structure:
-
-```text
-raw_data/
-  data/
-    luzern/
-      y/
-      n/
-    st gallen/
-      y/
-      n/
-```
-
-### 5.2 Generated Split
-
-After running the split script, training data is written to:
-
-```text
-project/data/
-  train/{y,n}
-  val/{y,n}
-  test/{y,n}
-```
-
-## 6. Execution
-
-Change into the project directory:
-
-```bash
-cd project
-```
-
-### 6.1 Create train/val/test split
-
-```bash
-uv run 01_split_data.py
-```
-
-### 6.2 Run baseline training (optional)
-
-```bash
-uv run 02_model_training_pipeline.py
-```
-
-### 6.3 Run Optuna + final training
-
-```bash
-uv run 03_optuna_training_pipeline.py
-```
-
-## 7. Output Artifacts
-
-For each best run, an artifact directory is created under:
-
-```text
-project/trained_models/MLP_optuna_best_score-<metric>_<timestamp>/
-```
-
-Generated files include:
-
-- `model_state_dict.pt` – trained model weights
-- `confusion_matrix.png` – confusion matrix visualization
-- `learning_curves.png` – train/validation curves
-- `history.json` – epoch-wise metrics
-- `metadata.json` – run metadata and hyperparameters
-
-## 8. Version Control Notes
-
-The following content is intentionally not tracked:
-
-- raw input datasets
-- generated split datasets
-- trained model artifacts
-- temporary/cache files
-
-Exclusions are handled via `.gitignore`.
+Diese Dateien werden separat ueber Hugging Face bereitgestellt oder lokal erzeugt.
