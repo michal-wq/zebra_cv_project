@@ -29,13 +29,15 @@ Die Hugging-Face-Repositories sind public gedacht. Dafuer wird kein Hugging-Face
 
 ## Big_Trans_3 Ausfuehren
 
-Fuer eine einfache Pruefung des besten Modells gibt es ein eigenes Skript fuer `Big_Trans_3`. Es laedt bei Bedarf Daten und Modell von Hugging Face, baut die passende Architektur aus `metadata.json` nach und evaluiert den Testsplit.
+Fuer eine einfache Pruefung des besten Modells gibt es ein eigenes Skript fuer `Big_Trans_3`. Es laedt bei Bedarf den Testsplit und das Modell von Hugging Face, baut die passende Architektur aus `metadata.json` nach und evaluiert den Testsplit.
 
 Aus dem Repository-Root:
 
 ```bash
 uv run python project/run_big_trans_3.py --download
 ```
+
+Der Download wird uebersprungen, wenn `project/data/test` und das Big-Trans-3-Modell bereits lokal vorhanden sind.
 
 Wenn Daten und Modell bereits heruntergeladen wurden:
 

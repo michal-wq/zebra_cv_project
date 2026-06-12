@@ -51,6 +51,11 @@ def parse_args() -> argparse.Namespace:
         help='Download artifacts and exit without evaluation.',
     )
     parser.add_argument(
+        '--force-download',
+        action='store_true',
+        help='Re-download artifacts even when local files already exist.',
+    )
+    parser.add_argument(
         '--image',
         type=Path,
         help='Optional image path for single-image prediction instead of test-set evaluation.',
@@ -87,34 +92,48 @@ def run_command(cmd: list[str]) -> None:
     subprocess.run(cmd, cwd=REPO_ROOT, check=True)
 
 
-def download_from_hugging_face() -> None:
-    """Downloads the public test split and the Big_Trans_3 model artifact."""
-    run_command(
-        [
-            'uvx',
-            'hf',
-            'download',
-            HF_DATA_REPO,
-            '--repo-type',
-            'dataset',
-            '--local-dir',
-            str(PROJECT_DIR),
-            '--include',
-            'data/*',
-        ]
-    )
-    run_command(
-        [
-            'uvx',
-            'hf',
-            'download',
-            HF_MODEL_REPO,
-            '--local-dir',
-            str(PROJECT_DIR),
-            '--include',
-            f'trained_models/{MODEL_ARTIFACT_NAME}/*',
-        ]
-    )
+def path_has_files(path: Path) -> bool:
+    return path.exists() and any(p.is_file() for p in path.rglob('*'))
+
+
+def model_artifact_exists() -> bool:
+    return MODEL_STATE_PATH.exists() and MODEL_METADATA_PATH.exists() and MODEL_RESULTS_PATH.exists()
+
+
+def download_from_hugging_face(force: bool = False) -> None:
+    if force or not path_has_files(TEST_DIR):
+        run_command(
+            [
+                'uvx',
+                'hf',
+                'download',
+                HF_DATA_REPO,
+                '--repo-type',
+                'dataset',
+                '--local-dir',
+                str(PROJECT_DIR),
+                '--include',
+                'data/test/*',
+            ]
+        )
+    else:
+        print(f'Skipping data download, found local test data at: {TEST_DIR}')
+
+    if force or not model_artifact_exists():
+        run_command(
+            [
+                'uvx',
+                'hf',
+                'download',
+                HF_MODEL_REPO,
+                '--local-dir',
+                str(PROJECT_DIR),
+                '--include',
+                f'trained_models/{MODEL_ARTIFACT_NAME}/*',
+            ]
+        )
+    else:
+        print(f'Skipping model download, found local artifact at: {MODEL_ARTIFACT_DIR}')
 
 
 def require_file(path: Path, hint: str) -> None:
@@ -264,7 +283,7 @@ def evaluate_test_set(device: torch.device, batch_size: int, num_workers: int, o
     require_dir(
         TEST_DIR,
         'Run with --download, or download the data with:\n'
-        f'uvx hf download {HF_DATA_REPO} --repo-type dataset --local-dir project --include "data/*"',
+        f'uvx hf download {HF_DATA_REPO} --repo-type dataset --local-dir project --include "data/test/*"',
     )
 
     test_ds = datasets.ImageFolder(TEST_DIR, transform=eval_transform())
@@ -345,7 +364,7 @@ def main() -> None:
     args = parse_args()
 
     if args.download or args.download_only:
-        download_from_hugging_face()
+        download_from_hugging_face(force=args.force_download)
         if args.download_only:
             return
 
