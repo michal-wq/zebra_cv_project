@@ -8,7 +8,7 @@ Models: https://huggingface.co/kamichal/zebra-cv-checkpoints
 
 ## Kurzstart
 
-Diese Befehle laden das GitHub-Repository, installieren die Python-Abhaengigkeiten und holen Daten sowie Modelle von Hugging Face.
+Diese Befehle laden das GitHub-Repository, installieren die Python-Abhaengigkeiten, holen Daten sowie Modelle von Hugging Face und fuehren anschliessend `Big_Trans_3` aus.
 
 ```bash
 git clone https://github.com/michal-wq/zebra_cv_project.git
@@ -27,40 +27,21 @@ uvx hf download kamichal/zebra-cv-checkpoints \
   --local-dir project \
   --include "trained_models/*"
 
-cd project
-uv run python 05_evaluate_trained_model.py
-```
-
-Die Hugging-Face-Repositories sind public gedacht. Dafuer wird kein Hugging-Face-Account und kein Token benoetigt.
-
-## Big_Trans_3 Ausfuehren
-
-Fuer eine einfache Pruefung des besten Modells gibt es ein eigenes Skript fuer `Big_Trans_3`. Es laedt bei Bedarf den Testsplit und das Modell von Hugging Face, baut die passende Architektur aus `metadata.json` nach und evaluiert den Testsplit.
-
-Aus dem Repository-Root:
-
-```bash
-uv run python project/run_big_trans_3.py --download
-```
-
-Der Download wird uebersprungen, wenn `project/data/test` und das Big-Trans-3-Modell bereits lokal vorhanden sind.
-
-Wenn Daten und Modell bereits heruntergeladen wurden:
-
-```bash
 uv run python project/run_big_trans_3.py
 ```
 
-Ein einzelnes Bild klassifizieren:
-
-```bash
-uv run python project/run_big_trans_3.py --image path/to/image.png
-```
+Die Hugging-Face-Repositories sind public gedacht. Dafuer wird kein Hugging-Face-Account und kein Token benoetigt.
 
 Das Skript schreibt die Testergebnisse nach:
 
 ```text
 project/big_trans_3_evaluation_results.json
+```
+
+Ein einzelnes Bild kann so klassifiziert werden:
+
+```bash
+uv run python project/run_big_trans_3.py --image path/to/image.png
 ```
 
 ## Voraussetzungen
@@ -145,7 +126,19 @@ project/trained_models/
 
 ## Evaluation ausfuehren
 
-Die meisten Skripte erwarten, dass sie aus dem Ordner `project/` gestartet werden.
+Fuer die einfache Pruefung des besten Modells wird `Big_Trans_3` aus dem Repository-Root gestartet:
+
+```bash
+uv run python project/run_big_trans_3.py
+```
+
+Ein einzelnes Bild kann so klassifiziert werden:
+
+```bash
+uv run python project/run_big_trans_3.py --image path/to/image.png
+```
+
+Weitere allgemeine Analyse-Skripte erwarten, dass sie aus dem Ordner `project/` gestartet werden:
 
 ```bash
 cd project
@@ -240,8 +233,7 @@ Wenn Hugging Face beim Download meldet, dass Dateien bereits existieren, ist das
 Wenn ein Skript `data/train`, `data/val` oder `data/test` nicht findet, wurde es wahrscheinlich aus dem falschen Ordner gestartet. In diesem Projekt die Python-Skripte aus `project/` ausfuehren:
 
 ```bash
-cd project
-uv run python 05_evaluate_trained_model.py
+uv run python project/run_big_trans_3.py
 ```
 
 Wenn `uvx hf download` nicht funktioniert, zuerst pruefen:
