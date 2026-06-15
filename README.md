@@ -11,6 +11,9 @@ Models: https://huggingface.co/kamichal/zebra-cv-checkpoints
 Diese Befehle laden das GitHub-Repository, installieren die Python-Abhaengigkeiten, holen Daten sowie Modelle von Hugging Face und fuehren anschliessend `Big_Trans_3` aus.
 
 ```bash
+mkdir test_zebra_cv_michal
+cd test_zebra_cv_michal
+
 git clone https://github.com/michal-wq/zebra_cv_project.git
 cd zebra_cv_project
 
